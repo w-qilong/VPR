@@ -14,13 +14,14 @@ from pytorch_lightning import Trainer
 
 from data import DInterface
 from model import AggMInterface
-from parser import parser
+from arg_parser import parser
+
 # import call callbacks functions and parser for args
 from utils.call_backs import load_callbacks
 
 warnings.filterwarnings("ignore")
 
-torch.set_float32_matmul_precision('high')
+torch.set_float32_matmul_precision("high")
 
 
 def main(args):
@@ -38,7 +39,7 @@ def main(args):
     trainer = Trainer(
         accelerator=args.accelerator,
         devices=args.devices,
-        default_root_dir=f'./logs/{args.model_name}_{args.backbone_size}',
+        default_root_dir=f"./logs/{args.model_name}_{args.backbone_size}",
         # we use current model for log folder name
         max_epochs=args.epochs,
         callbacks=args.callbacks,  # we only run the checkpointing callback (you can add more)
@@ -48,12 +49,13 @@ def main(args):
         enable_model_summary=True,
         benchmark=True,
         num_sanity_val_steps=0,  # runs a validation step before starting training
-        precision='16-mixed',  # we use half precision to reduce  memory usage
-        accumulate_grad_batches=args.gradient_accumulate_factor if args.gradient_accumulate else 1,
-     
+        precision="16-mixed",  # we use half precision to reduce  memory usage
+        accumulate_grad_batches=(
+            args.gradient_accumulate_factor if args.gradient_accumulate else 1
+        ),
         # todo: used for debug
         # profiler=profiler,
-        # fast_dev_run=True,  # uncomment or dev mode (only runs a one iteration train and validation, no checkpointing).
+        fast_dev_run=True,  # uncomment or dev mode (only runs a one iteration train and validation, no checkpointing).
         # limit_train_batches=10,
         # limit_val_batches=50
     )
@@ -67,6 +69,6 @@ def main(args):
     #                  ckpt_path='/media/cartolab/DataDisk/wuqilong_file/Projects/VPR_project_peft/logs/dinov2_finetune/lightning_logs/version_3/checkpoints/dinov2_finetune_epoch(17)_step(8802)_R1[0.8622]_R5[0.9311]_R10[0.9473].ckpt')
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = parser.parse_args()
     main(args)

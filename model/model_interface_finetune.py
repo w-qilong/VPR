@@ -6,7 +6,7 @@ import torch
 import torch.optim.lr_scheduler as lrs
 from utils import validation
 from pytorch_metric_learning.losses import CrossBatchMemory
-from losses import MetricLoss, LocalFeatureLoss
+from losses import MetricLoss, compute_guided_matching
 
 
 class AggMInterface(pl.LightningModule):
@@ -29,8 +29,8 @@ class AggMInterface(pl.LightningModule):
         try:
             # 添加调试信息
             module_path = "." + name
-            print(f"Attempting to import module from: {module_path}")
-            print(f"Looking for class: {camel_name}")
+            print(f"正在尝试从以下路径导入模块: {module_path}")
+            print(f"正在查找类: {camel_name}")
 
             module = importlib.import_module("." + name, package=__package__)
             Model = getattr(module, camel_name)
@@ -81,8 +81,6 @@ class AggMInterface(pl.LightningModule):
                 f'Optimizer {self.metric_loss_function} has not been added to "configure_loss()"'
             )
 
-        self.local_loss_function = LocalFeatureLoss()
-
         # define memory bank
         if self.hparams.memory_bank:
             self.memory_bank = CrossBatchMemory(
@@ -118,14 +116,12 @@ class AggMInterface(pl.LightningModule):
         # 这意味着数据加载器将返回包含BS个places的batch
         BS, N, ch, h, w = places.shape
 
-        # reshape places and labels
+        # 重塑places和labels的维度
         images = places.view(BS * N, ch, h, w)
         labels = labels.view(-1)
 
-        # Feed forward the batch to the model
-        cls_token, fine_feature = self.forward(
-            images
-        )
+        # 将batch输入模型进行前向传播
+        cls_token, topk_local_features = self.forward(images)
 
         if (
             self.hparams.memory_bank
@@ -133,7 +129,7 @@ class AggMInterface(pl.LightningModule):
         ):
             metric_loss = self.memory_bank(cls_token, labels)
         else:
-            # calculate metric loss
+            # 计算度量损失
             metric_loss, miner_outputs = self.metric_loss_function(cls_token, labels)
 
         # 从miner_outputs中获取正负样本对的索引
@@ -144,23 +140,25 @@ class AggMInterface(pl.LightningModule):
         a1, p, a2, n = miner_outputs
 
         # 使用permute重新排列维度顺序
-        a1_fused_features = fine_feature[a1]
-        p_fused_features = fine_feature[p]
-        a2_fused_features = fine_feature[a2]
-        n_fused_features = fine_feature[n]
+        a1_fine_patch_tokens = topk_local_features[a1]
+        p_fine_patch_tokens = topk_local_features[p]
+        a2_fine_patch_tokens = topk_local_features[a2]
+        n_fine_patch_tokens = topk_local_features[n]
 
-        simP = self.local_loss_function(a1_fused_features,p_fused_features).mean()
-        simN = self.local_loss_function(a2_fused_features,n_fused_features).mean()
+        # 计算局部损失
+        simP = compute_guided_matching(a1_fine_patch_tokens, p_fine_patch_tokens, is_training=True)
+        simN = compute_guided_matching(a2_fine_patch_tokens, n_fine_patch_tokens, is_training=True)
+
         # clamp函数用于将输入限制在指定范围内,这里设置min=0表示将所有小于0的值都设为0
         # 这样可以确保只有当负样本对的相似度大于正样本对的相似度时(即-simP+simN>0)才会产生损失
-        total_local_loss = torch.sum(torch.clamp(-simP+simN+0., min=0.))
-        
+        local_matching_loss = torch.sum(torch.clamp(-simP + simN + 0.0, min=0.0))
+
         # 计算总loss
-        total_loss = metric_loss + total_local_loss
+        total_loss = metric_loss + local_matching_loss
 
         # log metric loss and local loss
         self.log("metric_loss", metric_loss, prog_bar=True, logger=True)
-        self.log("local_loss", total_local_loss, prog_bar=True, logger=True)
+        self.log("local_loss", local_matching_loss, prog_bar=True, logger=True)
 
         # calculate the % of trivial pairs/triplets which do not contribute in the loss value
         nb_samples = cls_token.shape[0]
@@ -184,14 +182,16 @@ class AggMInterface(pl.LightningModule):
         self.triplet_batch_acc = []
 
     def on_validation_epoch_start(self):
-        self.val_outputs = [[] for _ in range(len(self.trainer.datamodule.eval_set))]
+        self.val_cls_outputs = [[] for _ in range(len(self.trainer.datamodule.eval_set))]
+        self.val_topk_local_features_outputs = [[] for _ in range(len(self.trainer.datamodule.eval_set))]
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         places, _ = batch
         # 计算描述符
-        cls_token, fine_feature = self.forward(places)
+        cls_token, topk_local_features = self.forward(places)
         # 保存每个数据加载器的每个batch输出
-        self.val_outputs[dataloader_idx].append(cls_token.detach().cpu())
+        self.val_cls_outputs[dataloader_idx].append(cls_token.detach().cpu())
+        self.val_topk_local_features_outputs[dataloader_idx].append(topk_local_features.detach().cpu())
 
     def on_validation_epoch_end(self):
         """返回按顺序排列的描述符
@@ -201,8 +201,12 @@ class AggMInterface(pl.LightningModule):
         """
         dm = self.trainer.datamodule
         k_values = self.hparams.recall_top_k  # recall K (1,5,10)
-        val_step_outputs = self.val_outputs
 
+        # 获取验证集的输出
+        val_cls_outputs = self.val_cls_outputs
+        val_topk_local_features_outputs = self.val_topk_local_features_outputs
+
+        # 遍历每个验证集
         for i, (val_set_name, val_dataset) in enumerate(
             zip(dm.eval_dataset, dm.eval_set)
         ):
@@ -234,15 +238,12 @@ class AggMInterface(pl.LightningModule):
                 print(f"Please implement validation_epoch_end for {val_set_name}")
                 raise NotImplemented
 
-            # get and concat all global features
-            cls_tokens = torch.concat(val_step_outputs[i], dim=0)
-            ref_cls_tokens = cls_tokens[
-                :num_references
-            ]  # list of ref images descriptors
-            query_cls_tokens = cls_tokens[
-                num_references:
-            ]  # list of query images descriptors
-            # get the results of first ranking
+            # 获取并连接所有全局特征
+            cls_tokens = torch.concat(val_cls_outputs[i], dim=0)
+            ref_cls_tokens = cls_tokens[:num_references]  # list of ref images descriptors 
+            query_cls_tokens = cls_tokens[num_references:]  # list of query images descriptors
+
+            # 获取第一次排序的结果
             pitts_dict, predictions = validation.get_validation_recalls(
                 r_list=ref_cls_tokens,
                 q_list=query_cls_tokens,
@@ -257,6 +258,27 @@ class AggMInterface(pl.LightningModule):
                     f"{val_set_name}/R{k}", pitts_dict[k], prog_bar=False, logger=True
                 )
 
+            # 获取patch tokens
+            topk_local_features_outputs = torch.concat(val_topk_local_features_outputs[i], dim=0)
+            query_topk_local_features_outputs = topk_local_features_outputs[num_references:]
+            ref_topk_local_features_outputs = topk_local_features_outputs[:num_references]
+                
+            # 获取第二次排序的结果
+            recalls, rerank_results = validation.get_rerank_results(
+                ref_topk_local_features_outputs,
+                query_topk_local_features_outputs,
+                predictions,
+                positives,
+                k_values,
+                print_results=True,
+                dataset_name=val_set_name,
+            )
+
+            for k in k_values[:3]:
+                self.log(
+                    f"{val_set_name}_rerank/R{k}", recalls[k], prog_bar=False, logger=True
+                )
+          
         # delete
         del (
             cls_tokens,
@@ -264,7 +286,11 @@ class AggMInterface(pl.LightningModule):
             query_cls_tokens,
             pitts_dict,
             predictions,
-            val_step_outputs,
+            val_cls_outputs,
+            val_attn_outputs,
+            val_fine_patch_tokens_outputs,
+            recalls,
+            rerank_results,
         )
         print("\n\n")
 
@@ -275,7 +301,7 @@ class AggMInterface(pl.LightningModule):
         else:
             weight_decay = 0
 
-        # set optimizer and its hparams
+        # 设置优化器及其超参数
         if self.hparams.optimizer.lower() == "sgd":
             optimizer = torch.optim.SGD(
                 self.parameters(),

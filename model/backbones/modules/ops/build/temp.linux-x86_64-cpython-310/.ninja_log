@@ -1,4 +1,0 @@
-# ninja log v5
-0	2755	1732686112922780602	/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/model/backbones/modules/ops/build/temp.linux-x86_64-cpython-310/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/model/backbones/modules/ops/src/cpu/ms_deform_attn_cpu.o	73881ec4cfa89e3f
-0	9323	1732686119489798252	/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/model/backbones/modules/ops/build/temp.linux-x86_64-cpython-310/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/model/backbones/modules/ops/src/vision.o	ff4914e4a0fa5d77
-0	10395	1732686120561801133	/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/model/backbones/modules/ops/build/temp.linux-x86_64-cpython-310/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/model/backbones/modules/ops/src/cuda/ms_deform_attn_cuda.o	2981bf23611018d0

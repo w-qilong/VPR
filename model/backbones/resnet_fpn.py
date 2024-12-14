@@ -57,7 +57,7 @@ class ResNetFPN_8_2(nn.Module):
         self.in_planes = initial_dim
 
         # Networks
-        self.conv1 = nn.Conv2d(1, initial_dim, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(3, initial_dim, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(initial_dim)
         self.relu = nn.ReLU(inplace=True)
 
@@ -135,7 +135,7 @@ class ResNetFPN_16_4(nn.Module):
         self.in_planes = initial_dim
 
         # Networks
-        self.conv1 = nn.Conv2d(1, initial_dim, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(3, initial_dim, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(initial_dim)
         self.relu = nn.ReLU(inplace=True)
 
@@ -214,6 +214,8 @@ if __name__ == "__main__":
         }
 
     model = ResNetFPN_8_2(configs['ResNetFPN_8_2'])
-    x=torch.randn(1,1,224,224)
+    x = torch.randn(1, 3, 224, 224)
+    # 将彩色图像转换为灰度图像
+    x = x.mean(dim=1, keepdim=True)
     print(model(x)[0].shape)
     print(model(x)[1].shape)
