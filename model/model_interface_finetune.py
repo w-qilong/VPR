@@ -7,9 +7,10 @@ import torch.optim.lr_scheduler as lrs
 from utils import validation
 from pytorch_metric_learning.losses import CrossBatchMemory
 from losses import MetricLoss
+from losses import MetricLoss
 
 
-class AggMInterface(pl.LightningModule):
+class RerankAggMInterface(pl.LightningModule):
     def __init__(self, **kargs):
         super().__init__()
         # self.save_hyperparameters() 等同于 self.hparams = hparams,
@@ -65,9 +66,9 @@ class AggMInterface(pl.LightningModule):
         args1.update(other_args)
         return Model(**args1)
 
-    def forward(self, x):
+    def forward(self, x, is_training=True, block_idx=None):
         # 前向传播
-        return self.model(x)
+        return self.model(x, is_training=is_training, block_idx=block_idx)
 
     def configure_loss(self):
         # 定义损失函数
@@ -121,7 +122,7 @@ class AggMInterface(pl.LightningModule):
         labels = labels.view(-1)
 
         # 将batch输入模型进行前向传播
-        cls_token = self.forward(images)
+        cls_token = self.forward(images, is_training=True, block_idx=None)
 
         if (
             self.hparams.memory_bank
@@ -131,6 +132,13 @@ class AggMInterface(pl.LightningModule):
         else:
             # 计算度量损失
             metric_loss, miner_outputs = self.metric_loss_function(cls_token, labels)
+
+        # 从miner_outputs中获取正负样本对的索引
+        # a1: anchor样本的索引,用于与positive样本配对
+        # p: positive样本的索引,与a1中的anchor样本配对形成正样本对
+        # a2: anchor样本的索引,用于与negative样本配对
+        # n: negative样本的索引,与a2中的anchor样本配对形成负样本对
+        # a1, p, a2, n = miner_outputs
 
         # log metric loss and local loss
         self.log("metric_loss", metric_loss, prog_bar=True, logger=True)
@@ -151,42 +159,23 @@ class AggMInterface(pl.LightningModule):
 
         # return total loss
         return {"loss": metric_loss}
+        return {"loss": metric_loss}
 
     def on_train_epoch_end(self):
         # we empty the batch_acc list for next epoch
         self.triplet_batch_acc = []
 
     def on_validation_epoch_start(self):
-        self.val_cls_outputs = [[] for _ in range(len(self.trainer.datamodule.eval_set))]
+        self.val_cls_outputs = [
+            [] for _ in range(len(self.trainer.datamodule.eval_set))
+        ]
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         places, _ = batch
         # 计算描述符
-        cls_token = self.forward(places)
+        cls_token, qkv = self.forward(places, is_training=False, block_idx=-2)
         # 保存每个数据加载器的每个batch输出
         self.val_cls_outputs[dataloader_idx].append(cls_token.detach().cpu())
-
-        # todo: 在此处获取query key value 用于重排序
-        '''
-        places, _ = batch
-        # 计算描述符
-        cls_token = self.forward(places)
-        # 前向传播，获取最后一层的注意力和特征
-        outputs = self.model(x, output_attentions=True, output_hidden_status=True, return_dict=True)
-
-         # 获取指定层的自注意力模块
-        layer_index = -1 # 表示最后一层
-        target_layer = self.model.encoder.layer[layer_index].attention.attention
-
-        # 获取输入隐藏状态
-        hidden_states = outputs.hidden_states[layer_index]
-        
-        # 计算query, key, value
-        query = target_layer.query(hidden_states)
-        key = target_layer.key(hidden_states)
-        value = target_layer.value(hidden_states)
-
-        '''
 
     def on_validation_epoch_end(self):
         """返回按顺序排列的描述符
@@ -234,8 +223,12 @@ class AggMInterface(pl.LightningModule):
 
             # 获取并连接所有全局特征
             cls_tokens = torch.concat(val_cls_outputs[i], dim=0)
-            ref_cls_tokens = cls_tokens[:num_references]  # list of ref images descriptors 
-            query_cls_tokens = cls_tokens[num_references:]  # list of query images descriptors
+            ref_cls_tokens = cls_tokens[
+                :num_references
+            ]  # list of ref images descriptors
+            query_cls_tokens = cls_tokens[
+                num_references:
+            ]  # list of query images descriptors
 
             # 获取第一次排序的结果
             pitts_dict, predictions = validation.get_validation_recalls(
@@ -252,6 +245,7 @@ class AggMInterface(pl.LightningModule):
                     f"{val_set_name}/R{k}", pitts_dict[k], prog_bar=False, logger=True
                 )
 
+
         # delete
         del (
             cls_tokens,
@@ -259,7 +253,7 @@ class AggMInterface(pl.LightningModule):
             query_cls_tokens,
             pitts_dict,
             predictions,
-            val_cls_outputs
+            val_cls_outputs,
         )
         print("\n\n")
 

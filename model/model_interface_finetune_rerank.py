@@ -9,6 +9,7 @@ from pytorch_metric_learning.losses import CrossBatchMemory
 from losses import MetricLoss, compute_guided_matching
 
 
+
 class RerankAggMInterface(pl.LightningModule):
     def __init__(self, **kargs):
         super().__init__()
@@ -158,7 +159,7 @@ class RerankAggMInterface(pl.LightningModule):
 
         # log metric loss and local loss
         self.log("metric_loss", metric_loss, prog_bar=True, logger=True)
-        self.log("local_matching_loss", local_matching_loss, prog_bar=True, logger=True)
+        self.log("local_loss", local_matching_loss, prog_bar=True, logger=True)
 
         # calculate the % of trivial pairs/triplets which do not contribute in the loss value
         nb_samples = cls_token.shape[0]
@@ -253,7 +254,7 @@ class RerankAggMInterface(pl.LightningModule):
                 dataset_name=val_set_name,
                 faiss_gpu=self.hparams.faiss_gpu,
             )
-            for k in k_values:
+            for k in k_values[:3]:
                 self.log(
                     f"{val_set_name}/R{k}", pitts_dict[k], prog_bar=False, logger=True
                 )
@@ -274,7 +275,7 @@ class RerankAggMInterface(pl.LightningModule):
                 dataset_name=val_set_name,
             )
 
-            for k in k_values:
+            for k in k_values[:3]:
                 self.log(
                     f"{val_set_name}_rerank/R{k}", recalls[k], prog_bar=False, logger=True
                 )
@@ -287,6 +288,8 @@ class RerankAggMInterface(pl.LightningModule):
             pitts_dict,
             predictions,
             val_cls_outputs,
+            val_attn_outputs,
+            val_fine_patch_tokens_outputs,
             recalls,
             rerank_results,
         )
