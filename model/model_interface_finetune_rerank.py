@@ -6,7 +6,8 @@ import torch
 import torch.optim.lr_scheduler as lrs
 from utils import validation
 from pytorch_metric_learning.losses import CrossBatchMemory
-from losses import MetricLoss
+from losses import MetricLoss, compute_guided_matching
+
 
 
 class RerankAggMInterface(pl.LightningModule):
@@ -65,9 +66,9 @@ class RerankAggMInterface(pl.LightningModule):
         args1.update(other_args)
         return Model(**args1)
 
-    def forward(self, x, is_training=True, block_idx=None):
+    def forward(self, x):
         # 前向传播
-        return self.model(x, is_training=is_training, block_idx=block_idx)
+        return self.model(x)
 
     def configure_loss(self):
         # 定义损失函数
@@ -121,7 +122,7 @@ class RerankAggMInterface(pl.LightningModule):
         labels = labels.view(-1)
 
         # 将batch输入模型进行前向传播
-        cls_token = self.forward(images, is_training=True, block_idx=None)
+        cls_token, topk_local_features = self.forward(images)
 
         if (
             self.hparams.memory_bank
@@ -137,10 +138,28 @@ class RerankAggMInterface(pl.LightningModule):
         # p: positive样本的索引,与a1中的anchor样本配对形成正样本对
         # a2: anchor样本的索引,用于与negative样本配对
         # n: negative样本的索引,与a2中的anchor样本配对形成负样本对
-        # a1, p, a2, n = miner_outputs
+        a1, p, a2, n = miner_outputs
+
+        # 使用permute重新排列维度顺序
+        a1_fine_patch_tokens = topk_local_features[a1]
+        p_fine_patch_tokens = topk_local_features[p]
+        a2_fine_patch_tokens = topk_local_features[a2]
+        n_fine_patch_tokens = topk_local_features[n]
+
+        # 计算局部损失
+        simP = compute_guided_matching(a1_fine_patch_tokens, p_fine_patch_tokens, is_training=True)
+        simN = compute_guided_matching(a2_fine_patch_tokens, n_fine_patch_tokens, is_training=True)
+
+        # clamp函数用于将输入限制在指定范围内,这里设置min=0表示将所有小于0的值都设为0
+        # 这样可以确保只有当负样本对的相似度大于正样本对的相似度时(即-simP+simN>0)才会产生损失
+        local_matching_loss = torch.sum(torch.clamp(-simP + simN + 0.0, min=0.0))
+
+        # 计算总loss
+        total_loss = metric_loss + local_matching_loss
 
         # log metric loss and local loss
         self.log("metric_loss", metric_loss, prog_bar=True, logger=True)
+        self.log("local_loss", local_matching_loss, prog_bar=True, logger=True)
 
         # calculate the % of trivial pairs/triplets which do not contribute in the loss value
         nb_samples = cls_token.shape[0]
@@ -157,23 +176,23 @@ class RerankAggMInterface(pl.LightningModule):
         )
 
         # return total loss
-        return {"loss": metric_loss}
+        return {"loss": total_loss}
 
     def on_train_epoch_end(self):
         # we empty the batch_acc list for next epoch
         self.triplet_batch_acc = []
 
     def on_validation_epoch_start(self):
-        self.val_cls_outputs = [
-            [] for _ in range(len(self.trainer.datamodule.eval_set))
-        ]
+        self.val_cls_outputs = [[] for _ in range(len(self.trainer.datamodule.eval_set))]
+        self.val_topk_local_features_outputs = [[] for _ in range(len(self.trainer.datamodule.eval_set))]
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         places, _ = batch
         # 计算描述符
-        cls_token, qkv = self.forward(places, is_training=False, block_idx=-2)
+        cls_token, topk_local_features = self.forward(places)
         # 保存每个数据加载器的每个batch输出
         self.val_cls_outputs[dataloader_idx].append(cls_token.detach().cpu())
+        self.val_topk_local_features_outputs[dataloader_idx].append(topk_local_features.detach().cpu())
 
     def on_validation_epoch_end(self):
         """返回按顺序排列的描述符
@@ -222,12 +241,8 @@ class RerankAggMInterface(pl.LightningModule):
 
             # 获取并连接所有全局特征
             cls_tokens = torch.concat(val_cls_outputs[i], dim=0)
-            ref_cls_tokens = cls_tokens[
-                :num_references
-            ]  # list of ref images descriptors
-            query_cls_tokens = cls_tokens[
-                num_references:
-            ]  # list of query images descriptors
+            ref_cls_tokens = cls_tokens[:num_references]  # list of ref images descriptors 
+            query_cls_tokens = cls_tokens[num_references:]  # list of query images descriptors
 
             # 获取第一次排序的结果
             pitts_dict, predictions = validation.get_validation_recalls(
@@ -244,6 +259,27 @@ class RerankAggMInterface(pl.LightningModule):
                     f"{val_set_name}/R{k}", pitts_dict[k], prog_bar=False, logger=True
                 )
 
+            # 获取patch tokens
+            topk_local_features_outputs = torch.concat(val_topk_local_features_outputs[i], dim=0)
+            query_topk_local_features_outputs = topk_local_features_outputs[num_references:]
+            ref_topk_local_features_outputs = topk_local_features_outputs[:num_references]
+                
+            # 获取第二次排序的结果
+            recalls, rerank_results = validation.get_rerank_results(
+                ref_topk_local_features_outputs,
+                query_topk_local_features_outputs,
+                predictions,
+                positives,
+                k_values,
+                print_results=True,
+                dataset_name=val_set_name,
+            )
+
+            for k in k_values[:3]:
+                self.log(
+                    f"{val_set_name}_rerank/R{k}", recalls[k], prog_bar=False, logger=True
+                )
+          
         # delete
         del (
             cls_tokens,
@@ -252,6 +288,10 @@ class RerankAggMInterface(pl.LightningModule):
             pitts_dict,
             predictions,
             val_cls_outputs,
+            val_attn_outputs,
+            val_fine_patch_tokens_outputs,
+            recalls,
+            rerank_results,
         )
         print("\n\n")
 
