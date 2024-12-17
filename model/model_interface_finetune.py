@@ -7,6 +7,7 @@ import torch.optim.lr_scheduler as lrs
 from utils import validation
 from pytorch_metric_learning.losses import CrossBatchMemory
 from losses import MetricLoss
+from losses import MetricLoss
 
 
 class RerankAggMInterface(pl.LightningModule):
@@ -158,6 +159,7 @@ class RerankAggMInterface(pl.LightningModule):
 
         # return total loss
         return {"loss": metric_loss}
+        return {"loss": metric_loss}
 
     def on_train_epoch_end(self):
         # we empty the batch_acc list for next epoch
@@ -186,7 +188,6 @@ class RerankAggMInterface(pl.LightningModule):
 
         # 获取验证集的输出
         val_cls_outputs = self.val_cls_outputs
-        val_topk_local_features_outputs = self.val_topk_local_features_outputs
 
         # 遍历每个验证集
         for i, (val_set_name, val_dataset) in enumerate(
@@ -239,10 +240,11 @@ class RerankAggMInterface(pl.LightningModule):
                 dataset_name=val_set_name,
                 faiss_gpu=self.hparams.faiss_gpu,
             )
-            for k in k_values[:3]:
+            for k in k_values:
                 self.log(
                     f"{val_set_name}/R{k}", pitts_dict[k], prog_bar=False, logger=True
                 )
+
 
         # delete
         del (

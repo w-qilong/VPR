@@ -27,7 +27,7 @@ parser.add_argument(
         "mapillary_dataset",
         # 'spedtest_dataset',
         # 'tokyo247_dataset',
-        # 'nordland_dataset',
+        'nordland_dataset',
         # 'pittsburg30k_dataset',
         # 'pittsburg250k_dataset',
         # 'essex3in1_dataset',
