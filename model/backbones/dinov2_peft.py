@@ -15,13 +15,14 @@ from dinov2.hub.backbones import (
     dinov2_vitg14,
 )
 
+
 class Dinov2Peft(nn.Module):
-    def __init__(self, backbone_size="small", topk=32):
+    def __init__(self, backbone_size="small", output_dim=256):
         super().__init__()
+        self.output_dim = output_dim
         self.backbone, self.checkpoint_path, self.patch_dim = self._initialize_backbone(
             backbone_size
         )
-        self.topk = topk
         self._load_checkpoint(self.checkpoint_path)
         self._freeze_non_adapter_params()
         self._print_param_stats()
@@ -36,6 +37,11 @@ class Dinov2Peft(nn.Module):
         }
         patch_dim = {"s": 384, "b": 768, "l": 1024, "g": 1024}
         checkpoint_path = f"/home/cartolab3/.cache/torch/hub/checkpoints/dinov2_vit{backbone_size[0]}14_pretrain.pth"
+        # 定义线性层
+        self.reduce_linear = nn.Linear(
+            patch_dim[backbone_size[0]], self.output_dim, bias=False
+        )
+
         return (
             backbone_map[backbone_size](pretrained=False),
             checkpoint_path,
@@ -76,29 +82,14 @@ class Dinov2Peft(nn.Module):
         # 前向传播，获取cls_token和patch_tokens
         coarse_features = self.backbone.forward_features(x)
         cls_token = coarse_features["x_norm_clstoken"]
-        patch_tokens = coarse_features["x_norm_patchtokens"]
+        cls_token=self.reduce_linear(cls_token)
 
-        # 计算cls_token与patch_tokens之间的相关性
-        similarity = torch.einsum("bd,bnd->bn", cls_token, patch_tokens)
+        return cls_token
 
-        # 获取与cls_token最相关的top k个patch的index
-        _, topk_indices = torch.topk(similarity, self.topk, dim=1)
-
-        # 扩展索引维度以匹配特征维度
-        expanded_indices = topk_indices.unsqueeze(-1).expand(-1, -1, patch_tokens.shape[-1])
-        # 使用gather选择对应的patch_tokens
-        selected_patches = torch.gather(patch_tokens, 1, expanded_indices)
-
-        return cls_token, patch_tokens, selected_patches
-    
-
-
-    
 
 if __name__ == "__main__":
     model = Dinov2Peft().cuda()
     x = torch.randn(1, 3, 224, 224).cuda()
     y = model(x)
-    print(y[0].shape)
-    print(y[1].shape)
-    print(y[2].shape)   
+    print(y.shape)
+

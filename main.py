@@ -55,8 +55,8 @@ def main(args):
         ),
         # todo: used for debug
         # profiler=profiler,
-        fast_dev_run=True,  # uncomment or dev mode (only runs a one iteration train and validation, no checkpointing).
-        # limit_train_batches=10,
+        # fast_dev_run=True,  # uncomment or dev mode (only runs a one iteration train and validation, no checkpointing).
+        # limit_train_batches=1,
         # limit_val_batches=50
     )
 

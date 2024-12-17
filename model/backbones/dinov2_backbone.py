@@ -10,7 +10,7 @@ class DinoV2Backbone(nn.Module):
 
         # 加载预训练的DINOv2模型
         self.model = Dinov2Model.from_pretrained(
-            f"D:\PythonProject\RerankVPR\pretrained_model\dinov2_{backbone_size}"
+            f"/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/pretrained_model/dinov2_{backbone_size}"
         )
 
         # 冻结所有参数
@@ -61,7 +61,7 @@ class DinoV2Backbone(nn.Module):
         """获取patch size"""
         return self.model.config.patch_size
 
-    def forward(self, x):
+    def forward(self, x, qkv_layer_index=-1):
         # 获取输入图像的尺寸
         B, C, H, W = x.shape
         patch_size = self.get_patch_size()
@@ -69,7 +69,8 @@ class DinoV2Backbone(nn.Module):
         w = W // patch_size
 
         # 前向传播，获取最后一层的注意力和特征
-        outputs = self.model(x, output_attentions=True, return_dict=True)
+        outputs = self.model(x, output_attentions=True, output_hidden_status=True, return_dict=True)
+        
 
         # 获取最后一层的注意力 [B, num_heads, N, N]
         last_attn = outputs.attentions[-1]
@@ -77,17 +78,7 @@ class DinoV2Backbone(nn.Module):
         # 获取patch tokens [B, N, C]
         patch_tokens = outputs.last_hidden_state
 
-        # 处理注意力图
-        B, H, N, _ = last_attn.shape
-
-        # 移除CLS token的注意力
-        attn = last_attn[:, :, 1:, 1:]
-
-        # 计算平均注意力并重塑为空间形式
-        attn = attn.mean(dim=-1)  # [B, num_heads, N-1]
-        attn = attn.reshape(B, H, h, w)
-
-        return attn, patch_tokens[:, 0], patch_tokens[:, 1:]  # 移除CLS token
+        return patch_tokens[:, 0]
     
 def visualize_attention(image_tensor, attention_map, save_path=None, alpha=0.6):
     """
@@ -157,7 +148,8 @@ if __name__ == "__main__":
     from PIL import Image
 
     model = DinoV2Backbone(backbone_size="small", finetune_last_n_layers=2)
-    image_path = r"D:\PythonProject\RerankVPR\visualization\imgs\output_imgs\tokyo\00010.jpg"
+    print(model)
+    image_path = r"/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/visualization/imgs/output_imgs/nordland/0000003.jpg"
     image = Image.open(image_path)
     transform = transforms.Compose([
         transforms.Resize((224, 224)),

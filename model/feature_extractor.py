@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from backbones import DinoV2Backbone, ResNetFPN_8_2, ResNetFPN_16_4
+from .backbones import DinoV2Backbone, ResNetFPN_8_2, ResNetFPN_16_4
 import torch.nn.functional as F
 
 # 为细粒度CNN特征提取配置参数

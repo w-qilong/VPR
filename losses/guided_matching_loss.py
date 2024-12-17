@@ -64,7 +64,7 @@ def test_guided_matching():
     torch.manual_seed(42)
     
     # 测试参数
-    batch_size = 2
+    batch_size = 50
     channels = 256
     top_k = 64
     

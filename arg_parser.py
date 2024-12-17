@@ -3,11 +3,11 @@ from argparse import ArgumentParser
 parser = ArgumentParser()
 
 # todo: Model Hyperparameters
-parser.add_argument('--model_name', default='feature_extractor', type=str)
-parser.add_argument('--backbone_size', default='small', type=str)
-parser.add_argument('--fine_fused_dim', default=128, type=int)
-parser.add_argument('--topk', default=64, type=int) # 选择的topk个patch tokens
-parser.add_argument('--rerank_candidate', default=100, type=int) # 重排序的候选数量
+parser.add_argument('--model_name', default='dinov2_finetune', type=str)
+parser.add_argument('--backbone_size', default='large', type=str)
+parser.add_argument('--finetune_last_n_layers', default= 1, type=int)
+parser.add_argument('--output_dim', default=1024, type=int)
+
 # todo: Datasets information
 # Typically, we need to verify the performance of our model on multiple validation datasets.
 # Here, we can assign train/eval/test datasets. Here, we use standard_data for
@@ -26,7 +26,7 @@ parser.add_argument(
         'mapillary_dataset',
         # 'spedtest_dataset',
         # 'tokyo247_dataset',
-        # 'nordland_dataset',
+        'nordland_dataset',
         # 'pittsburg30k_dataset',
         # 'pittsburg250k_dataset',
         # 'essex3in1_dataset',
@@ -34,7 +34,7 @@ parser.add_argument(
 
 # set monitor dataset
 parser.add_argument('--monitor_metric', default='mapillary_dataset', type=str)
-parser.add_argument('--recall_top_k', default=[1, 5, 10, 20], type=list)
+parser.add_argument('--recall_top_k', default=[1, 5, 10, 20, 50], type=list)
 
 # todo: Basic Training Control for global trainer
 # set random seed
@@ -46,7 +46,7 @@ parser.add_argument('--devices', default=[0], type=list)
 # set training epochs
 parser.add_argument('--epochs', default=60, type=int)
 # set batch size
-parser.add_argument('--batch_size', default=16, type=int)
+parser.add_argument('--batch_size', default=128, type=int)
 # set number of process worker in dataloader
 parser.add_argument('--num_workers', default=15, type=int)
 # set init learning rate for global trainer
