@@ -5,7 +5,7 @@ parser = ArgumentParser()
 # todo: Model Hyperparameters
 parser.add_argument("--model_name", default="dinov2_backbone", type=str)
 parser.add_argument("--backbone_size", default="dinov2_large", type=str)
-parser.add_argument("--finetune_last_n_layers", default=1, type=int)
+parser.add_argument("--finetune_last_n_layers", default=6, type=int)
 parser.add_argument("--reduced_dim", default=1024, type=int)
 
 
@@ -14,7 +14,8 @@ parser.add_argument("--reduced_dim", default=1024, type=int)
 # Here, we can assign train/eval/test datasets. Here, we use standard_data for
 parser.add_argument("--train_dataset", default="gsvcities_dataset", type=str)
 # args for training dataset GSVCities
-parser.add_argument("--image_size", default=(224, 224), type=tuple)
+parser.add_argument("--image_size_train", default=(224, 224), type=tuple)
+parser.add_argument("--image_size_eval", default=(560, 560), type=tuple)
 parser.add_argument("--shuffle_all", default=True, type=bool)
 parser.add_argument("--img_per_place", default=4, type=int)
 parser.add_argument("--min_img_per_place", default=4, type=int)
@@ -53,7 +54,7 @@ parser.add_argument("--batch_size", default=64, type=int)
 # set number of process worker in dataloader
 parser.add_argument("--num_workers", default=15, type=int)
 # set init learning rate for global trainer
-parser.add_argument("--lr", default=1e-5, type=float)
+parser.add_argument("--lr", default=2e-5, type=float)
 # select optimizer. We have defined multiple optimizers in model_interface.py, we can select one for our study here.
 parser.add_argument(
     "--optimizer", choices=["sgd", "adamw", "adam"], default="adamw", type=str
@@ -133,7 +134,7 @@ parser.add_argument("--gradient_accumulate_factor", default=2, type=int)
 
 # whether to use early stopping
 parser.add_argument("--use_early_stopping", default=True, type=bool)
-parser.add_argument("--patience", default=3, type=int)
+parser.add_argument("--patience", default=5, type=int)
 
 # set if StochasticWeightAveraging need to be used
 parser.add_argument("--StochasticWeightAveraging", default=False, type=bool)

@@ -1,6 +1,7 @@
 import torch.nn as nn
 from torch.hub import load
 import torch.nn.functional as F
+import torch
 
 dinov2_backbones = {
     "dinov2_small": {
@@ -30,9 +31,9 @@ dinov2_backbones = {
 }
 
 
-class DinoV2Backbone(nn.Module):
+class Dinov2Backbone(nn.Module):
     """DINOv2 backbone with configurable fine-tuning and dimension reduction
-    
+
     Attributes:
         backbone_size (str): Model size (small/base/large/giant)
         finetune_last_n_layers (int): Number of layers to fine-tune
@@ -41,20 +42,21 @@ class DinoV2Backbone(nn.Module):
         patch_size (int): Size of image patches
         embedding_size (int): Size of embeddings before reduction
     """
+
     def __init__(
         self, backbone_size="dinov2_large", finetune_last_n_layers=1, reduced_dim=1024
     ):
         super().__init__()
-        
+
         # 初始化配置
         self._init_config(backbone_size, finetune_last_n_layers, reduced_dim)
         # 加载预训练模型
         self._load_model()
         # 设置参数冻结
-        self._freeze_layers()
+        # self._freeze_layers()
         # 打印参数统计
-        self.print_trainable_parameters()
-        
+        # self.print_trainable_parameters()
+
         # 初始化attention相关属性
         self.attention_outputs = {}
         self.hook_handle = None
@@ -63,24 +65,25 @@ class DinoV2Backbone(nn.Module):
         """初始化模型配置"""
         if backbone_size not in dinov2_backbones:
             raise ValueError(f"Invalid backbone_size: {backbone_size}")
-            
+
         self.backbone_size = backbone_size
         self.finetune_last_n_layers = finetune_last_n_layers
         self.reduced_dim = reduced_dim
-        
+
         config = dinov2_backbones[backbone_size]
         self.num_heads = config["num_heads"]
         self.patch_size = config["patch_size"]
         self.embedding_size = config["embedding_size"]
-        
+
         # 初始化降维层
         self.reduce_linear = nn.Linear(self.embedding_size, reduced_dim, bias=False)
 
     def _load_model(self):
         """加载预训练模型"""
         self.model = load(
-            repo_or_dir="facebookresearch/dinov2",
+            repo_or_dir="/home/cartolab3/.cache/torch/hub/facebookresearch_dinov2_main",
             model=dinov2_backbones[self.backbone_size]["name"],
+            source='local',
             trust_repo=True,
         )
 
@@ -99,13 +102,13 @@ class DinoV2Backbone(nn.Module):
 
     def forward(self, x, masks=None, is_training=False, block_idx=-1):
         """模型前向传播
-        
+
         Args:
             x (torch.Tensor): 输入图像 [B, C, H, W]
             masks (torch.Tensor, optional): 注意力掩码
             is_training (bool): 是否为训练模式
             block_idx (int): 获取attention的层索引(-1表示最后一层)
-            
+
         Returns:
             训练模式: cls_token [B, reduced_dim]
             测试模式: (cls_token, (q, k, v))
@@ -121,30 +124,40 @@ class DinoV2Backbone(nn.Module):
             self.attention_outputs.clear()
 
         # 前向传播
-        for blk in self.model.blocks:
+        with torch.no_grad():
+            for idx, blk in enumerate(
+                self.model.blocks[: -self.finetune_last_n_layers]
+            ):
+                x = blk(x)
+        x = x.detach()
+
+        for blk in self.model.blocks[-self.finetune_last_n_layers :]:
             x = blk(x)
-        
+
         # 获取最终输出
         x = self.model.norm(x)
-        cls_token = self.reduce_linear(x[:, 0])
+        # cls_token = self.reduce_linear(x[:, 0, :])
+        cls_token = x[:, 0]
 
         if is_training:
             return cls_token
-            
+
         # 测试模式处理attention输出
         return self._process_test_output(cls_token, B, N, C)
 
     def _process_test_output(self, cls_token, B, N, C):
         """处理测试模式的输出"""
         qkv = self.attention_outputs["qkv"]
-        qkv = qkv.reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        qkv = qkv.reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(
+            2, 0, 3, 1, 4
+        )
         q, k, v = qkv[0], qkv[1], qkv[2]
-        
+
         # 清理hook
         if self.hook_handle is not None:
             self.hook_handle.remove()
             self.hook_handle = None
-            
+
         return cls_token, (q, k, v)
 
     def print_trainable_parameters(self):
@@ -175,7 +188,7 @@ class DinoV2Backbone(nn.Module):
 
         def hook(module, input, output):
             self.attention_outputs = {
-                "qkv": output,  
+                "qkv": output,
             }
 
         return hook
@@ -206,13 +219,13 @@ if __name__ == "__main__":
     from PIL import Image
     import torch
 
-    model = DinoV2Backbone(
-        backbone_size="dinov2_small", finetune_last_n_layers=1, reduced_dim=1024
-    )
+    model = Dinov2Backbone(
+        backbone_size="dinov2_base", finetune_last_n_layers=1, reduced_dim=1024
+    ).cuda()
 
     print(model)
-    
-    x=torch.rand(2,3,224,224)
+
+    x = torch.rand(2, 3, 224, 224).cuda()
 
     # 训练模式
     output = model(x, is_training=True)  # 只返回cls_token

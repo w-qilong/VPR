@@ -7,10 +7,9 @@ import torch.optim.lr_scheduler as lrs
 from utils import validation
 from pytorch_metric_learning.losses import CrossBatchMemory
 from losses import MetricLoss
-from losses import MetricLoss
 
 
-class RerankAggMInterface(pl.LightningModule):
+class AggMInterface(pl.LightningModule):
     def __init__(self, **kargs):
         super().__init__()
         # self.save_hyperparameters() 等同于 self.hparams = hparams,
@@ -158,7 +157,6 @@ class RerankAggMInterface(pl.LightningModule):
         )
 
         # return total loss
-        return {"loss": metric_loss}
         return {"loss": metric_loss}
 
     def on_train_epoch_end(self):

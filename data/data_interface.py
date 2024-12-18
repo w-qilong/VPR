@@ -21,11 +21,12 @@ class DInterface(pl.LightningDataModule):
         self.num_workers = kwargs['num_workers']
         # get batch size from kwargs
         self.batch_size = kwargs['batch_size']
-        # get image size from kwargs
-        self.image_size = kwargs['image_size']
+        # get train image size from kwargs
+        self.image_size_train = kwargs['image_size_train']
+        self.image_size_eval = kwargs['image_size_eval']
         # get shuffle for GSVCites
         self.shuffle_all = kwargs['shuffle_all']
-        # get img_per_place for GSVCites
+        # get img_per_place for GSVCitess
         self.img_per_place = kwargs['img_per_place']
         # get min_img_per_place for GSVCites
         self.min_img_per_place = kwargs['min_img_per_place']
@@ -40,7 +41,7 @@ class DInterface(pl.LightningDataModule):
 
         # define transform for training dataset
         self.train_transform = T.Compose([
-            T.Resize(self.image_size, interpolation=T.InterpolationMode.BILINEAR),
+            T.Resize(self.image_size_train, interpolation=T.InterpolationMode.BILINEAR),
             T.RandAugment(num_ops=3, interpolation=T.InterpolationMode.BILINEAR),
             T.ToTensor(),
             T.Normalize(mean=self.mean_std['mean'], std=self.mean_std['std']),
@@ -48,7 +49,7 @@ class DInterface(pl.LightningDataModule):
 
         # define transform for training dataset
         self.valid_transform = T.Compose([
-            T.Resize(self.image_size, interpolation=T.InterpolationMode.BILINEAR),
+            T.Resize(self.image_size_eval, interpolation=T.InterpolationMode.BILINEAR),
             T.ToTensor(),
             T.Normalize(mean=self.mean_std['mean'], std=self.mean_std['std'])
         ])
@@ -189,5 +190,5 @@ class DInterface(pl.LightningDataModule):
             ["Batch size (PxK)", f"{self.batch_size}x{self.img_per_place}"])
         table.add_row(
             ["# of iterations", f"{self.train_set.__len__() // self.batch_size}"])
-        table.add_row(["Image size", f"{self.image_size}"])
+        table.add_row(["Image size", f"{self.image_size_train}"])
         print(table.get_string(title="Training config"))
