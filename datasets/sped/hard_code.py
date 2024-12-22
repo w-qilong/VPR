@@ -46,7 +46,6 @@ print(len(qImages))
 
 qIdx = np.arange(0, len(qImages))
 pIdx = [np.array(i[1]) for i in ground_truth]
-images = np.concatenate((dbImages, qImages[qIdx]))
 
 
 # hard code

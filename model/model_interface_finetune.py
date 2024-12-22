@@ -65,9 +65,9 @@ class AggMInterface(pl.LightningModule):
         args1.update(other_args)
         return Model(**args1)
 
-    def forward(self, x, is_training=True, block_idx=None):
+    def forward(self, x):
         # 前向传播
-        return self.model(x, is_training=is_training, block_idx=block_idx)
+        return self.model(x)
 
     def configure_loss(self):
         # 定义损失函数
@@ -121,7 +121,7 @@ class AggMInterface(pl.LightningModule):
         labels = labels.view(-1)
 
         # 将batch输入模型进行前向传播
-        cls_token = self.forward(images, is_training=True, block_idx=None)
+        cls_token = self.forward(images)
 
         if (
             self.hparams.memory_bank
@@ -171,7 +171,7 @@ class AggMInterface(pl.LightningModule):
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         places, _ = batch
         # 计算描述符
-        cls_token, qkv = self.forward(places, is_training=False, block_idx=-2)
+        cls_token = self.forward(places)
         # 保存每个数据加载器的每个batch输出
         self.val_cls_outputs[dataloader_idx].append(cls_token.detach().cpu())
 
@@ -214,6 +214,24 @@ class AggMInterface(pl.LightningModule):
             elif "tokyo" in val_set_name:
                 num_references = val_dataset.dbStruct.numDb
                 positives = val_dataset.getPositives()
+            elif "gardenspoint" in val_set_name:
+                num_references = val_dataset.num_references
+                positives = val_dataset.pIdx
+            elif "stlucia" in val_set_name:
+                num_references = val_dataset.num_references
+                positives = val_dataset.pIdx
+            elif "eynsham" in val_set_name:
+                num_references = val_dataset.num_references
+                positives = val_dataset.pIdx
+            elif "svoxnight" in val_set_name:
+                num_references = val_dataset.num_references
+                positives = val_dataset.pIdx
+            elif "svoxrain" in val_set_name:
+                num_references = val_dataset.num_references
+                positives = val_dataset.pIdx
+            elif "amstertime" in val_set_name:
+                num_references = val_dataset.num_references
+                positives = val_dataset.pIdx
 
             else:
                 print(f"Please implement validation_epoch_end for {val_set_name}")
@@ -242,7 +260,6 @@ class AggMInterface(pl.LightningModule):
                 self.log(
                     f"{val_set_name}/R{k}", pitts_dict[k], prog_bar=False, logger=True
                 )
-
 
         # delete
         del (

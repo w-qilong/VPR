@@ -25,7 +25,7 @@ def get_layers_output(layers):
 image = Image.open("imgs/0000003.jpg")
 
 
-# 获取指定层的输出
+# 获取指定层的输出 
 layers_to_hook = [model.encoder.layer[0].attention.attention.query, 
                   model.encoder.layer[0].attention.attention.key, 
                   model.encoder.layer[0].attention.attention.value]

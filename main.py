@@ -57,16 +57,18 @@ def main(args):
         # profiler=profiler,
         # fast_dev_run=True,  # uncomment or dev mode (only runs a one iteration train and validation, no checkpointing).
         # limit_train_batches=1,
-        # limit_val_batches=50
+        # limit_val_batches=10
     )
 
     # train and eval model using train_dataloader and eval_dataloader
-    trainer.fit(model, data_module)
+    # trainer.fit(model, data_module)
 
     # validate model using defined test_dataloader, you have to set the ckpt_path
-    # trainer.validate(model=model,
-    #                  datamodule=data_module,
-    #                  ckpt_path='/media/cartolab/DataDisk/wuqilong_file/Projects/VPR_project_peft/logs/dinov2_finetune/lightning_logs/version_3/checkpoints/dinov2_finetune_epoch(17)_step(8802)_R1[0.8622]_R5[0.9311]_R10[0.9473].ckpt')
+    trainer.validate(
+        model=model,
+        datamodule=data_module,
+        ckpt_path='/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/logs/dinov2_backbone_dinov2_large/lightning_logs/version_0/checkpoints/dinov2_backbone_epoch(04)_step(4885)_R1[0.8959]_R5[0.9514]_R10[0.9608].ckpt',
+    )
 
 
 if __name__ == "__main__":

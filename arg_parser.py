@@ -6,16 +6,14 @@ parser = ArgumentParser()
 parser.add_argument("--model_name", default="dinov2_backbone", type=str)
 parser.add_argument("--backbone_size", default="dinov2_large", type=str)
 parser.add_argument("--finetune_last_n_layers", default=6, type=int)
-parser.add_argument("--reduced_dim", default=1024, type=int)
-
 
 # todo: Datasets information
 # Typically, we need to verify the performance of our model on multiple validation datasets.
 # Here, we can assign train/eval/test datasets. Here, we use standard_data for
 parser.add_argument("--train_dataset", default="gsvcities_dataset", type=str)
 # args for training dataset GSVCities
-parser.add_argument("--image_size_train", default=(224, 224), type=tuple)
-parser.add_argument("--image_size_eval", default=(560, 560), type=tuple)
+parser.add_argument("--image_size_train", default=[224, 224], type=list)
+parser.add_argument("--image_size_eval", default=[560, 560], type=list)
 parser.add_argument("--shuffle_all", default=True, type=bool)
 parser.add_argument("--img_per_place", default=4, type=int)
 parser.add_argument("--min_img_per_place", default=4, type=int)
@@ -25,13 +23,19 @@ parser.add_argument("--persistent_workers", default=False, type=bool)
 parser.add_argument(
     "--eval_datasets",
     default=[
-        "mapillary_dataset",
+        # "mapillary_dataset",
         # 'spedtest_dataset',
         # 'tokyo247_dataset',
-        'nordland_dataset',
+        # 'nordland_dataset',
         # 'pittsburg30k_dataset',
         # 'pittsburg250k_dataset',
         # 'essex3in1_dataset',
+        # 'gardenspoint_dataset',
+        # 'stlucia_dataset',
+        # 'eynsham_dataset',
+        # 'svoxnight_dataset',
+        # 'svoxrain_dataset',
+        'amstertime_dataset',
     ],
     type=list,
 )
