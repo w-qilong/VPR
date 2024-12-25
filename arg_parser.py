@@ -23,7 +23,7 @@ parser.add_argument("--persistent_workers", default=False, type=bool)
 parser.add_argument(
     "--eval_datasets",
     default=[
-        # "mapillary_dataset",
+        "mapillary_dataset",
         # 'spedtest_dataset',
         # 'tokyo247_dataset',
         # 'nordland_dataset',
@@ -35,7 +35,7 @@ parser.add_argument(
         # 'eynsham_dataset',
         # 'svoxnight_dataset',
         # 'svoxrain_dataset',
-        'amstertime_dataset',
+        # 'amstertime_dataset',
     ],
     type=list,
 )
@@ -58,7 +58,7 @@ parser.add_argument("--batch_size", default=64, type=int)
 # set number of process worker in dataloader
 parser.add_argument("--num_workers", default=15, type=int)
 # set init learning rate for global trainer
-parser.add_argument("--lr", default=2e-5, type=float)
+parser.add_argument("--lr", default=1e-5, type=float)
 # select optimizer. We have defined multiple optimizers in model_interface.py, we can select one for our study here.
 parser.add_argument(
     "--optimizer", choices=["sgd", "adamw", "adam"], default="adamw", type=str
@@ -84,8 +84,8 @@ parser.add_argument(
 
 # Set args for Different Scheduler
 # For CosineAnnealingLR
-parser.add_argument("--T_max", default=60, type=int)
-parser.add_argument("--eta_min", default=6e-8, type=float)
+parser.add_argument("--T_max", default=5, type=int)
+parser.add_argument("--eta_min", default=1e-6, type=float)
 
 # For StepLR
 # parser.add_argument('--lr_decay_steps', default=20, type=int)

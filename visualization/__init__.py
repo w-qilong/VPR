@@ -1,1 +1,3 @@
-from .visualization_tools import get_pca_map, get_cluster_map, get_scale_map, get_robust_pca, get_similarity_map
+from .visualization_pca_map import get_pca_map, get_cluster_map, get_scale_map, get_robust_pca, get_similarity_map
+from .visualization_multi_head import visualize_multi_head_attention
+from .visualization_multi_head import visualize_saliency_maps

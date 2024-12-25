@@ -36,7 +36,7 @@ def copy_random_pictures(source_dir: str, target_dir: str, num_pictures: int) ->
         shutil.copy2(source_path, target_path)
 
 if __name__ == "__main__":
-    source_dir = "/media/cartolab3/DataDisk/wuqilong_file/VPR_datasets/nordland/images/test/queries"
-    target_dir = "imgs/train_random"
-    num_pictures = 100
+    source_dir = "/media/cartolab3/DataDisk/wuqilong_file/VPR_datasets/Tokyo247/Tokyo247query_subset_v2"
+    target_dir = "tmp_imgs"
+    num_pictures = 5
     copy_random_pictures(source_dir, target_dir, num_pictures)

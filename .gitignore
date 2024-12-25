@@ -2,3 +2,9 @@ pretrained_model/
 logs/
 others/
 imgs/
+__pycache__/
+sample_imgs/
+tmp_imgs/
+*.pyc
+
+
