@@ -1,12 +1,16 @@
 import importlib
 import inspect
-
+import numpy as np
+from typing import Dict, Any
+from prettytable import PrettyTable
 import pytorch_lightning as pl
 import torch
+from tqdm import tqdm
 import torch.optim.lr_scheduler as lrs
 from utils import validation
 from pytorch_metric_learning.losses import CrossBatchMemory
 from losses import MetricLoss
+from utils import hook_func
 
 
 class AggMInterface(pl.LightningModule):
@@ -169,85 +173,53 @@ class AggMInterface(pl.LightningModule):
         ]
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        places, _ = batch
-        # 计算描述符
-        cls_token = self.forward(places)
-        # 保存每个数据加载器的每个batch输出
-        self.val_cls_outputs[dataloader_idx].append(cls_token.detach().cpu())
+        with torch.no_grad():
+            places, _ = batch
+            # 简化为只获取cls_token
+            cls_token = self.forward(places)
+            self.val_cls_outputs[dataloader_idx].append(cls_token.detach().cpu())
+
+    def get_dataset_info(self, val_set_name, val_dataset):
+        """获取数据集的基本信息"""
+        dataset_configs = {
+            "pitts": lambda: (val_dataset.dbStruct.numDb, val_dataset.getPositives()),
+            "mapillary": lambda: (val_dataset.num_references, val_dataset.pIdx),
+            "nordland": lambda: (val_dataset.num_references, val_dataset.pIdx),
+            "spedtest": lambda: (val_dataset.num_references, val_dataset.pIdx),
+            "essex3in1": lambda: (val_dataset.num_references, val_dataset.pIdx),
+            "tokyo": lambda: (val_dataset.dbStruct.numDb, val_dataset.getPositives()),
+            "gardenspoint": lambda: (val_dataset.num_references, val_dataset.pIdx),
+            "stlucia": lambda: (val_dataset.num_references, val_dataset.pIdx),
+            "eynsham": lambda: (val_dataset.num_references, val_dataset.pIdx),
+            "svoxnight": lambda: (val_dataset.num_references, val_dataset.pIdx),
+            "svoxrain": lambda: (val_dataset.num_references, val_dataset.pIdx),
+            "amstertime": lambda: (val_dataset.num_references, val_dataset.pIdx),
+        }
+
+        for key in dataset_configs:
+            if key in val_set_name:
+                return dataset_configs[key]()
+
+        raise NotImplementedError(f"请实现{val_set_name}的validation_epoch_end")
 
     def on_validation_epoch_end(self):
-        """返回按顺序排列的描述符
-        取决于验证数据集的实现方式
-        对于此项目(MSLS val, Pittburg val),始终是先参考图像后查询图像
-        [R1, R2, ..., Rn, Q1, Q2, ...]
-        """
         dm = self.trainer.datamodule
-        k_values = self.hparams.recall_top_k  # recall K (1,5,10)
-
-        # 获取验证集的输出
-        val_cls_outputs = self.val_cls_outputs
+        k_values = self.hparams.recall_top_k
 
         # 遍历每个验证集
         for i, (val_set_name, val_dataset) in enumerate(
             zip(dm.eval_dataset, dm.eval_set)
         ):
-            if "pitts" in val_set_name:
-                # split to ref and queries
-                num_references = val_dataset.dbStruct.numDb
-                positives = val_dataset.getPositives()
-            elif "mapillary" in val_set_name:
-                # split to ref and queries
-                num_references = val_dataset.num_references
-                positives = val_dataset.pIdx
-            elif "nordland" in val_set_name:
-                # split to ref and queries
-                num_references = val_dataset.num_references
-                positives = val_dataset.pIdx
-            elif "spedtest" in val_set_name:
-                # split to ref and queries
-                num_references = val_dataset.num_references
-                positives = val_dataset.pIdx
-            elif "essex3in1" in val_set_name:
-                # split to ref and queries
-                num_references = val_dataset.num_references
-                positives = val_dataset.pIdx
-            elif "tokyo" in val_set_name:
-                num_references = val_dataset.dbStruct.numDb
-                positives = val_dataset.getPositives()
-            elif "gardenspoint" in val_set_name:
-                num_references = val_dataset.num_references
-                positives = val_dataset.pIdx
-            elif "stlucia" in val_set_name:
-                num_references = val_dataset.num_references
-                positives = val_dataset.pIdx
-            elif "eynsham" in val_set_name:
-                num_references = val_dataset.num_references
-                positives = val_dataset.pIdx
-            elif "svoxnight" in val_set_name:
-                num_references = val_dataset.num_references
-                positives = val_dataset.pIdx
-            elif "svoxrain" in val_set_name:
-                num_references = val_dataset.num_references
-                positives = val_dataset.pIdx
-            elif "amstertime" in val_set_name:
-                num_references = val_dataset.num_references
-                positives = val_dataset.pIdx
+            # 获取数据集信息
+            num_references, positives = self.get_dataset_info(val_set_name, val_dataset)
 
-            else:
-                print(f"Please implement validation_epoch_end for {val_set_name}")
-                raise NotImplemented
+            # 获取特征并分割
+            cls_tokens = torch.concat(self.val_cls_outputs[i], dim=0)
+            ref_cls_tokens = cls_tokens[:num_references]
+            query_cls_tokens = cls_tokens[num_references:]
 
-            # 获取并连接所有全局特征
-            cls_tokens = torch.concat(val_cls_outputs[i], dim=0)
-            ref_cls_tokens = cls_tokens[
-                :num_references
-            ]  # list of ref images descriptors
-            query_cls_tokens = cls_tokens[
-                num_references:
-            ]  # list of query images descriptors
-
-            # 获取第一次排序的结果
-            pitts_dict, predictions = validation.get_validation_recalls(
+            # 第一次排序
+            pitts_dict, first_predictions = validation.get_validation_recalls(
                 r_list=ref_cls_tokens,
                 q_list=query_cls_tokens,
                 k_values=k_values,
@@ -256,21 +228,199 @@ class AggMInterface(pl.LightningModule):
                 dataset_name=val_set_name,
                 faiss_gpu=self.hparams.faiss_gpu,
             )
+
+            # 记录第一次结果
             for k in k_values:
                 self.log(
                     f"{val_set_name}/R{k}", pitts_dict[k], prog_bar=False, logger=True
                 )
+            # 存储第一次排序结果
+            first_recalls = {f"R@{k}": pitts_dict[k] for k in k_values}
 
-        # delete
-        del (
-            cls_tokens,
-            ref_cls_tokens,
-            query_cls_tokens,
-            pitts_dict,
-            predictions,
-            val_cls_outputs,
+            # 第二次排序
+            print(f"\n开始对{val_set_name}数据集进行二次排序...")
+            rerank_predictions = self.rerank_predictions(
+                val_dataset, num_references, first_predictions
+            )
+
+            # 计算并记录第二次结果
+            d, rerank_predictions = self.calculate_rerank_metrics(
+                rerank_predictions, positives, k_values, val_set_name
+            )
+
+            # 记录第二次结果
+            for k in k_values:
+                self.log(
+                    f"{val_set_name}_rerank/R{k}", d[k], prog_bar=False, logger=True
+                )
+            # 存储重排序结果
+            rerank_recalls = {f"Rerank_R@{k}": d[k] for k in k_values}
+
+            # 清理内存
+            del (
+                cls_tokens,
+                ref_cls_tokens,
+                query_cls_tokens,
+                pitts_dict,
+                rerank_predictions,
+            )
+            torch.cuda.empty_cache()
+
+            print("\n")
+
+    def calculate_rerank_metrics(
+        self, rerank_predictions, positives, k_values, val_set_name
+    ):
+        """计算重排序的recall@k"""
+        rerank_predictions = np.array(rerank_predictions)
+        correct_at_k = np.zeros(len(k_values))
+        for q_idx, pred in enumerate(rerank_predictions):
+            for i, n in enumerate(k_values):
+                if np.any(np.in1d(pred[:n], positives[q_idx])):
+                    correct_at_k[i:] += 1
+                    break
+
+        correct_at_k = correct_at_k / len(rerank_predictions)
+        d = {k: v for (k, v) in zip(k_values, correct_at_k)}
+
+        print()  # print a new line
+        table = PrettyTable()
+        table.field_names = ["K"] + [str(k) for k in k_values]
+        table.add_row(["Recall@K"] + [f"{100 * v:.2f}" for v in correct_at_k])
+        print(table.get_string(title=f"Performances rerank on {val_set_name}"))
+
+        return d, rerank_predictions
+
+    def rerank_predictions(self, val_dataset, num_references, first_predictions):
+        """执行重排序"""
+        rerank_predictions = []
+
+        with torch.no_grad():
+            for query_idx in tqdm(range(len(first_predictions))):
+                # 获取查询和参考图像
+                query_image = (
+                    val_dataset[query_idx + num_references][0]
+                    .unsqueeze(0)
+                    .to(self.device)
+                )
+                candidate_ref_indices = first_predictions[query_idx]
+                ref_images = torch.stack(
+                    [val_dataset[i][0] for i in candidate_ref_indices]
+                ).to(self.device)
+
+                # 获取特征和注意力图
+                query_saliency_map, query_feats = self.get_features_and_attention(
+                    query_image
+                )
+                ref_saliency_map, ref_feats = self.get_features_and_attention(
+                    ref_images
+                )
+
+                # 重排序单个查询
+                rerank_predictions.append(
+                    validation.single_rerank(
+                        query_feats,
+                        ref_feats,
+                        query_saliency_map,
+                        ref_saliency_map,
+                        candidate_ref_indices,
+                        saliency_thresh=self.hparams.saliency_thresh,
+                        nn_match_thresh=self.hparams.nn_match_thresh,
+                    )
+                )
+
+        return rerank_predictions
+
+    def get_features_and_attention(self, images):
+        """获取特征和注意力图"""
+        feats = []
+        hook_handlers = []
+
+        # 注册hooks
+        facet_layer_and_facet = self.hparams.facet_layer_and_facet
+        hook_func.register_hooks(
+            self.model.model, facet_layer_and_facet, hook_handlers, feats
         )
-        print("\n\n")
+
+        # 前向传播
+        self.forward(images)
+
+        # 取消hooks
+        hook_func.unregister_hooks(hook_handlers)
+
+        return self.process_attention_and_features(
+            (feats[0], feats[1]),
+            facet_layer_and_facet,
+            self.hparams.include_cls,
+            self.hparams.bin,
+            self.hparams.hierarchy,
+        )
+
+    def process_attention_and_features(
+        self,
+        feats_and_saliency_map=(None, None),
+        facet_layer_and_facet={22: "value", 23: "attn"},
+        include_cls=False,
+        bin=False,
+        hierarchy=2,
+    ):
+        """处理注意力图和特征
+
+        Args:
+            feats_and_saliency_map (tuple): 包含两个元素:
+                - feats_and_saliency_map[0]: token特征 [B, h, t, d] 或 [B, t, d]
+                - feats_and_saliency_map[1]: 注意力特征 [B, h, t, t]
+            facet_layer_and_facet (dict): 包含不同层的facet信息
+            include_cls (bool): 是否包含CLS token
+            bin (bool): 是否使用log bin处理
+            hierarchy (int): log bin的层级数
+
+        Returns:
+            tuple: (saliency_map, desc)
+                - saliency_map: 显著性图 [B, t-1]
+                - desc: 描述符 [B, 1, t, d*h] 或 [B, 1, t-1, d*h*num_bins]
+        """
+        # 1. 处理注意力图
+        saliency_map = feats_and_saliency_map[1]  # [B, h, t, t]
+
+        # 提取CLS token的注意力并计算平均值
+        saliency_map = saliency_map[:, :, 0, 1:].mean(dim=1)  # [B, t-1]
+
+        # 对每个样本进行归一化
+        temp_mins = saliency_map.min(dim=1)[0]  # [B]
+        temp_maxs = saliency_map.max(dim=1)[0]  # [B]
+        saliency_map = (saliency_map - temp_mins.unsqueeze(1)) / (
+            temp_maxs - temp_mins
+        ).unsqueeze(
+            1
+        )  # [B, t-1]
+
+        # 2. 处理特征
+        tokens_num = feats_and_saliency_map[1].shape[2]
+        num_patches = (int(tokens_num**0.5), int(tokens_num**0.5))
+        facet = list(facet_layer_and_facet.values())[0]
+
+        feats = feats_and_saliency_map[0]  # [B, h, t, d] 或 [B, t, d]
+
+        # 统一token特征的维度格式
+        if facet == "token":
+            feats = feats.unsqueeze(1)  # [B, 1, t, d]
+
+        # 处理CLS token
+        if not include_cls:
+            feats = feats[:, :, 1:]  # [B, h, t-1, d]
+
+        # 生成描述符
+        if not bin:
+            feats = feats.permute(0, 2, 3, 1)  # [B, t-1, d, h]
+            feats = feats.flatten(start_dim=-2)  # [B, t-1, d*h]
+            feats = feats.unsqueeze(1)  # [B, 1, t-1, d*h]
+        else:
+            feats = hook_func.log_bin(
+                feats, num_patches, hierarchy=hierarchy
+            )  # [B, 1, t-1, d*h*num_bins]
+
+        return saliency_map, feats
 
     def configure_optimizers(self):
         # 如果设置了weight_decay,将其值设置给优化器

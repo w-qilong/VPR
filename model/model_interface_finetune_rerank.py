@@ -234,7 +234,24 @@ class RerankAggMInterface(pl.LightningModule):
             elif "tokyo" in val_set_name:
                 num_references = val_dataset.dbStruct.numDb
                 positives = val_dataset.getPositives()
-
+            elif "gardenspoint" in val_set_name:
+                num_references = val_dataset.num_references
+                positives = val_dataset.pIdx
+            elif "stlucia" in val_set_name:
+                num_references = val_dataset.num_references
+                positives = val_dataset.pIdx
+            elif "eynsham" in val_set_name:
+                num_references = val_dataset.num_references
+                positives = val_dataset.pIdx
+            elif "svoxnight" in val_set_name:
+                num_references = val_dataset.num_references
+                positives = val_dataset.pIdx
+            elif "svoxrain" in val_set_name:
+                num_references = val_dataset.num_references
+                positives = val_dataset.pIdx
+            elif "amstertime" in val_set_name:
+                num_references = val_dataset.num_references
+                positives = val_dataset.pIdx
             else:
                 print(f"Please implement validation_epoch_end for {val_set_name}")
                 raise NotImplemented

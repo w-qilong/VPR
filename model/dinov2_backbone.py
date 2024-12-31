@@ -57,13 +57,13 @@ class Dinov2Backbone(nn.Module):
 
         # DINO V2模型属性
         self.num_features = self.model.num_features
-        self.num_tokens = 1
         self.n_blocks = self.model.n_blocks
         self.num_heads = self.model.num_heads
         self.patch_size = self.model.patch_size
         self.num_register_tokens = self.model.num_register_tokens
         self.interpolate_antialias = self.model.interpolate_antialias
         self.interpolate_offset = self.model.interpolate_offset
+        self.stride = self.model.patch_embed.proj.stride
 
     def _load_model(self):
         """加载预训练模型"""
@@ -95,50 +95,6 @@ class Dinov2Backbone(nn.Module):
         x = x[:, 0]
 
         return x
-    
-    # def _process_test_output(self, cls_token, patch_tokens, B, N, C):
-    #     """处理测试模式的输出"""
-    #     qkv = self.attention_outputs["qkv"]
-    #     qkv = qkv.reshape(B, N, 3, self.num_heads, C // self.num_heads)
-    #     q, k, v = unbind(qkv, 2)
-
-    #     # 清理hook
-    #     if self.hook_handle is not None:
-    #         self.hook_handle.remove()
-    #         self.hook_handle = None
-
-    #     return cls_token, patch_tokens, (q, k, v)
-
-
-    # def _attention_hook(self):
-    #     """定义hook函数来捕获attention的q,k,v"""
-
-    #     def hook(module, input, output):
-    #         self.attention_outputs = {
-    #             "qkv": output,
-    #         }
-
-    #     return hook
-
-    # def _register_hook(self, block_idx):
-    #     """为指定block的attention层注册hook
-    #     Args:
-    #         block_idx (int): block的索引
-    #     """
-    #     if not 0 <= block_idx < len(self.model.blocks):
-    #         raise ValueError(
-    #             f"Invalid block index {block_idx}. Should be in range [0, {len(self.model.blocks)-1}]"
-    #         )
-
-    #     # 如果已存在hook，先移除
-    #     if self.hook_handle is not None:
-    #         self.hook_handle.remove()
-
-    #     # 注册新的hook
-    #     target_block = self.model.blocks[block_idx]
-    #     self.hook_handle = target_block.attn.qkv.register_forward_hook(
-    #         self._attention_hook()
-    #     )
 
 
 if __name__ == "__main__":

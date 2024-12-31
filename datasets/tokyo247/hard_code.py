@@ -3,6 +3,7 @@ from collections import namedtuple
 from os.path import join
 from pathlib import Path
 from os.path import join, exists
+import shutil
 import torch.utils.data as data
 from PIL import Image
 from scipy.io import loadmat
@@ -49,7 +50,7 @@ from sklearn.neighbors import NearestNeighbors
 # print(len(db[3]))
 
 
-root_dir = '/media/cartolab/DataDisk/wuqilong_file/VPR_datasets/Tokyo247'
+root_dir = '/media/cartolab3/DataDisk/wuqilong_file/VPR_datasets/Tokyo247'
 if not exists(root_dir):
     raise FileNotFoundError(
         'root_dir is hardcoded, please adjust to point to Tokyo247 dataset')
@@ -134,8 +135,44 @@ class Tokyo247Dataset(data.Dataset):
 
         return self.positives
 
+if __name__ == "__main__":
+    import numpy as np
+    num_pairs = 10
+    output_path = "/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/sample_imgs/tokyo247/"
 
-strctFile = Tokyo247Dataset(onlyDB=False)
-for item, index in strctFile:
-    print(item)
-    break
+    strctFile = Tokyo247Dataset(onlyDB=False)
+    query_images = strctFile.dbStruct.qImage
+    db_images = strctFile.dbStruct.dbImage
+    positives = strctFile.getPositives()
+
+    # 随机选择num_pairs对查询图像和参考图像
+    random_indices = np.random.choice(len(query_images), num_pairs, replace=False) # 不重复采样
+    sampled_qImages = [query_images[i] for i in random_indices]
+    sampled_qImages = [join(queries_dir, qIm) for qIm in sampled_qImages]
+
+    sampled_pIdx = [positives[i] for i in random_indices] # list[array]
+    db_images=np.array(db_images)
+    sampled_dbImages = [db_images[i] for i in sampled_pIdx]
+
+     # 遍历保存查询和其对应的参考图像
+    for i in range(num_pairs):
+        query_image = sampled_qImages[i]
+        reference_images = sampled_dbImages[i]
+        print(query_image)
+        print(reference_images)
+        
+        # 以i为文件名保存查询和其对应的参考图像
+        os.makedirs(os.path.join(output_path), exist_ok=True)
+        os.makedirs(os.path.join(output_path, str(i)), exist_ok=True)
+        os.makedirs(os.path.join(output_path, str(i), "query"), exist_ok=True)
+        os.makedirs(os.path.join(output_path, str(i), "ref"), exist_ok=True)
+
+        # 保存查询图像
+        shutil.copy(query_image, os.path.join(output_path, str(i), "query"))
+        # 保存参考图像
+        for ref_image in reference_images:
+            ref_image = join(root_dir, ref_image)
+            ref_image = ref_image.replace('.jpg', '.png')
+            shutil.copy(ref_image, os.path.join(output_path, str(i), "ref"))
+
+

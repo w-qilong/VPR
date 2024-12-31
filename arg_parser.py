@@ -7,6 +7,15 @@ parser.add_argument("--model_name", default="dinov2_backbone", type=str)
 parser.add_argument("--backbone_size", default="dinov2_large", type=str)
 parser.add_argument("--finetune_last_n_layers", default=6, type=int)
 
+# todo:rerank
+parser.add_argument("--rerank", default=True, type=bool)
+parser.add_argument("--saliency_thresh", default=0.05, type=float)
+parser.add_argument("--nn_match_thresh", default=0.85, type=float)
+parser.add_argument("--facet_layer_and_facet", default={22: "value", 23: "attn"}, type=dict)
+parser.add_argument("--include_cls", default=False, type=bool)
+parser.add_argument("--bin", default=False, type=bool)
+parser.add_argument("--hierarchy", default=2, type=int)
+
 # todo: Datasets information
 # Typically, we need to verify the performance of our model on multiple validation datasets.
 # Here, we can assign train/eval/test datasets. Here, we use standard_data for
@@ -24,15 +33,15 @@ parser.add_argument(
     "--eval_datasets",
     default=[
         "mapillary_dataset",
-        # 'spedtest_dataset',
-        # 'tokyo247_dataset',
-        # 'nordland_dataset',
-        # 'pittsburg30k_dataset',
+        'spedtest_dataset',
+        'tokyo247_dataset',
+        'nordland_dataset',
+        'pittsburg30k_dataset',
         # 'pittsburg250k_dataset',
         # 'essex3in1_dataset',
         # 'gardenspoint_dataset',
-        # 'stlucia_dataset',
-        # 'eynsham_dataset',
+        'stlucia_dataset',
+        'eynsham_dataset',
         # 'svoxnight_dataset',
         # 'svoxrain_dataset',
         # 'amstertime_dataset',

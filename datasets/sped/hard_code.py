@@ -53,6 +53,6 @@ pIdx = [np.array(i[1]) for i in ground_truth]
 # np.save('sped_val_qImages.npy',qImages)
 # np.save('sped_val_qIdx.npy',qIdx)
 # np.save('sped_val_pIdx.npy',pIdx)
-
 # print(qIdx[0])
+
 

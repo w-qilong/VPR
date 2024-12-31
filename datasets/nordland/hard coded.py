@@ -1,64 +1,82 @@
 from pathlib import Path
 import numpy as np
-from PIL import Image
-from torch.utils.data import Dataset
 import os
+from glob import glob
+from natsort import natsorted
+from sklearn.neighbors import NearestNeighbors
 
-DATASET_ROOT = r'/media/cartolab/DataDisk/wuqilong_file/VPR_datasets/VPR_Bench_Datasets/Nordland'
-# path_obj = Path(DATASET_ROOT)
+positive_dist_threshold = 25
 
-# if not path_obj.exists():
-#     raise Exception('Please make sure the path to Nordland dataset is correct')
+DATASET_ROOT = r'/media/cartolab3/DataDisk/wuqilong_file/VPR_datasets/nordland/images/test'
+path_obj = Path(DATASET_ROOT)
 
-# if not path_obj.joinpath('query'):
-#     raise Exception(
-#         f'Please make sure the directory train_val from Nordland dataset is situated in the directory {DATASET_ROOT}')
-# else:
-#     query_folder = path_obj.joinpath('query')
+if not path_obj.exists():
+    raise Exception('Please make sure the path to nordland dataset is correct')
 
-# if not path_obj.joinpath('ref'):
-#     raise Exception(
-#         f'Please make sure the directory train_val from Nordland dataset is situated in the directory {DATASET_ROOT}')
-# else:
-#     ref_folder = path_obj.joinpath('ref')
+if not path_obj.joinpath('queries'):
+    raise Exception(
+        f'Please make sure the directory test from nordland dataset is situated in the directory {DATASET_ROOT}')
+else:
+    queries_folder = path_obj.joinpath('queries')
 
-# if not path_obj.joinpath('ground_truth_new.npy'):
-#     raise Exception(
-#         f'Please make sure the directory train_val from Nordland dataset is situated in the directory {DATASET_ROOT}')
-# else:
-#     ground_truth_path = path_obj.joinpath('ground_truth_new.npy')
-#     ground_truth = np.load(ground_truth_path, allow_pickle=True)
-#     print(ground_truth[2])
+if not path_obj.joinpath('database'):
+    raise Exception(
+        f'Please make sure the directory test from nordland dataset is situated in the directory {DATASET_ROOT}')
+else:
+    database_folder = path_obj.joinpath('database')
 
-#     ' ground truth: [2757 list([27569, 27570, 27571])]'
+# 根据utm坐标，确定query和positive图像
 
-# dbImages = os.listdir(ref_folder)
-# dbImages = sorted(dbImages, key=lambda x: int(x.split('.')[0]))
-# dbImages = np.array([os.path.join('ref', i) for i in dbImages])
-# print(len(dbImages))
+#### Read paths and UTM coordinates for all images.
+database_paths = natsorted(glob(os.path.join(database_folder, "**", "*.jpg"), recursive=True)) # 绝对路径
+queries_paths = natsorted(glob(os.path.join(queries_folder, "**", "*.jpg"),  recursive=True))
 
-
-# qImages = os.listdir(query_folder)
-# qImages = sorted(qImages, key=lambda x: int(x.split('.')[0]))
-# qImages = np.array([os.path.join('query', i) for i in qImages])
-# print(len(qImages))
+# The format must be path/to/file/@utm_easting@utm_northing@...@.jpg
+database_utms = np.array([(path.split("@")[1], path.split("@")[2]) for path in database_paths]).astype(float)
+queries_utms = np.array([(path.split("@")[1], path.split("@")[2]) for path in queries_paths]).astype(float)
 
 
-# qIdx = np.arange(0, len(qImages))
-# pIdx = [np.array(i[1]) for i in ground_truth]
-# images = np.concatenate((dbImages, qImages[qIdx]))
+# Find positives_per_query, which are within positive_dist_threshold (default 25 meters)
+knn = NearestNeighbors(n_jobs=-1)
+knn.fit(database_utms)
+positives_per_query = knn.radius_neighbors(queries_utms,
+                                                radius=positive_dist_threshold,
+                                                return_distance=False)
+database_num = len(database_paths)
+queries_num = len(queries_paths)
 
+qIdx = np.arange(0, len(queries_paths))
+pIdx = positives_per_query
+
+# 获取当前文件的绝对路径
+current_file_path = os.path.abspath(__file__)
+# 获取当前文件的目录
+current_file_dir = os.path.dirname(current_file_path)
 
 # hard code
-# np.save('nordland_val_dbImages.npy',dbImages)
-# np.save('nordland_val_qImages.npy',qImages)
-# np.save('nordland_val_qIdx.npy',qIdx)
-# np.save('nordland_val_pIdx.npy',pIdx)
+np.save(os.path.join(current_file_dir, 'nordland_test_dbImages.npy'),database_paths)
+np.save(os.path.join(current_file_dir, 'nordland_test_qImages.npy'),queries_paths)
+np.save(os.path.join(current_file_dir, 'nordland_test_qIdx.npy'),qIdx)
 
-# 加载
-# dbImages = np.load('nordland_val_dbImages.npy')
-# qImages = np.load('nordland_val_qImages.npy')
-# qIdx = np.load('nordland_val_qIdx.npy')
-pIdx = np.load('/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/datasets/nordland/nordland_val_pIdx.npy',allow_pickle=True)
-print(pIdx[2])
+# numpy不能保存长度不一致的列表，所以需要将每个列表转换为numpy数组，并存储在一个numpy数组中，使用object数据类型
+# 将每个列表转换为numpy数组，并存储在一个numpy数组中，使用object数据类型
+irregular_array = np.empty(len(pIdx), dtype=object)
+for i, sublist in enumerate(pIdx):
+    irregular_array[i] = np.array(sublist)
+
+# 保存numpy数组到文件
+np.save(os.path.join(current_file_dir, 'nordland_test_pIdx.npy'),irregular_array)
+
+# 加载pIdx
+# 从文件中加载numpy数组
+irregular_array = np.load(os.path.join(current_file_dir, 'nordland_test_pIdx.npy'), allow_pickle=True)
+
+# 现在irregular_array是一个numpy数组，你可以使用索引来访问数据
+# 例如，访问第一个列表
+first_list = irregular_array[0]
+print(first_list)  # 输出: [1 2 3]
+
+# 访问第二个列表
+second_list = irregular_array[1]
+print(second_list)  # 输出: [4 5]
 
