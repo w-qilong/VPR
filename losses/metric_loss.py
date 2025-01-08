@@ -1,5 +1,6 @@
 from pytorch_metric_learning import losses, miners
 from pytorch_metric_learning.distances import CosineSimilarity
+from pytorch_metric_learning.losses import CrossBatchMemory
 from torch import nn
 
 
@@ -23,9 +24,10 @@ class MetricLoss(nn.Module):
             # 多重相似度损失
             # alpha和beta控制正负样本的权重
             # distance使用余弦相似度计算样本间距离
+            # 默认使用mean reducer
             self.loss_fn = losses.MultiSimilarityLoss(
                 alpha=1.0, beta=50, base=0.0, distance=CosineSimilarity()
-            )
+            ) 
             # 多重相似度采样器,用于选择有意义的样本对
             self.miner = miners.MultiSimilarityMiner(
                 epsilon=margin, distance=CosineSimilarity()

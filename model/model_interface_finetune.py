@@ -88,10 +88,10 @@ class AggMInterface(pl.LightningModule):
         # define memory bank
         if self.hparams.memory_bank:
             self.memory_bank = CrossBatchMemory(
-                self.triplet_loss_function,
-                self.hparams.mix_out_channels * self.hparams.mix_out_rows,
-                memory_size=1024,
-                miner=self.miner,
+                self.metric_loss_function.loss_fn,
+                self.model.num_features,
+                memory_size=self.hparams.memory_bank_size,
+                miner=self.metric_loss_function.miner,
             )
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
@@ -136,6 +136,20 @@ class AggMInterface(pl.LightningModule):
             # 计算度量损失
             metric_loss, miner_outputs = self.metric_loss_function(cls_token, labels)
 
+            # calculate the % of trivial pairs/triplets which do not contribute in the loss value
+            nb_samples = cls_token.shape[0]
+            nb_mined = len(set(miner_outputs[0].detach().cpu().numpy()))
+            triplet_batch_acc = 1.0 - (nb_mined / nb_samples)
+
+            # get mean accuracy
+            self.triplet_batch_acc.append(triplet_batch_acc)
+            self.log(
+                "triplet_mean_acc",
+                sum(self.triplet_batch_acc) / len(self.triplet_batch_acc),
+                prog_bar=True,
+                logger=True,
+            )
+
         # 从miner_outputs中获取正负样本对的索引
         # a1: anchor样本的索引,用于与positive样本配对
         # p: positive样本的索引,与a1中的anchor样本配对形成正样本对
@@ -146,26 +160,14 @@ class AggMInterface(pl.LightningModule):
         # log metric loss and local loss
         self.log("metric_loss", metric_loss, prog_bar=True, logger=True)
 
-        # calculate the % of trivial pairs/triplets which do not contribute in the loss value
-        nb_samples = cls_token.shape[0]
-        nb_mined = len(set(miner_outputs[0].detach().cpu().numpy()))
-        triplet_batch_acc = 1.0 - (nb_mined / nb_samples)
-
-        # get mean accuracy
-        self.triplet_batch_acc.append(triplet_batch_acc)
-        self.log(
-            "triplet_mean_acc",
-            sum(self.triplet_batch_acc) / len(self.triplet_batch_acc),
-            prog_bar=True,
-            logger=True,
-        )
-
         # return total loss
         return {"loss": metric_loss}
 
     def on_train_epoch_end(self):
         # we empty the batch_acc list for next epoch
         self.triplet_batch_acc = []
+        if self.hparams.memory_bank:
+            self.memory_bank.reset_queue()
 
     def on_validation_epoch_start(self):
         self.val_cls_outputs = [
@@ -234,27 +236,27 @@ class AggMInterface(pl.LightningModule):
                 self.log(
                     f"{val_set_name}/R{k}", pitts_dict[k], prog_bar=False, logger=True
                 )
-            # 存储第一次排序结果
-            first_recalls = {f"R@{k}": pitts_dict[k] for k in k_values}
 
-            # 第二次排序
-            print(f"\n开始对{val_set_name}数据集进行二次排序...")
-            rerank_predictions = self.rerank_predictions(
-                val_dataset, num_references, first_predictions
-            )
+            if self.hparams.rerank:
 
-            # 计算并记录第二次结果
-            d, rerank_predictions = self.calculate_rerank_metrics(
-                rerank_predictions, positives, k_values, val_set_name
-            )
-
-            # 记录第二次结果
-            for k in k_values:
-                self.log(
-                    f"{val_set_name}_rerank/R{k}", d[k], prog_bar=False, logger=True
+                # 第二次排序
+                print(f"\n开始对{val_set_name}数据集进行二次排序...")
+                rerank_predictions = self.rerank_predictions(
+                    val_dataset, num_references, first_predictions
                 )
-            # 存储重排序结果
-            rerank_recalls = {f"Rerank_R@{k}": d[k] for k in k_values}
+
+                # 计算并记录第二次结果
+                d, rerank_predictions = self.calculate_rerank_metrics(
+                    rerank_predictions, positives, k_values, val_set_name
+                )
+
+                # 记录第二次结果
+                for k in k_values:
+                    self.log(
+                        f"{val_set_name}_rerank/R{k}", d[k], prog_bar=False, logger=True
+                    )
+
+                del d, rerank_predictions
 
             # 清理内存
             del (
@@ -262,7 +264,6 @@ class AggMInterface(pl.LightningModule):
                 ref_cls_tokens,
                 query_cls_tokens,
                 pitts_dict,
-                rerank_predictions,
             )
             torch.cuda.empty_cache()
 
@@ -485,6 +486,16 @@ class AggMInterface(pl.LightningModule):
 
             elif self.hparams.lr_scheduler == "exp":
                 scheduler = lrs.ExponentialLR(optimizer, gamma=self.hparams.gamma)
+
+            elif self.hparams.lr_scheduler == "cosine_with_restarts":
+                scheduler = lrs.CosineAnnealingWarmRestarts(
+                    optimizer, T_0=self.hparams.T_0, T_mult=self.hparams.T_mult
+                )
+
+            elif self.hparams.lr_scheduler == "plateau":
+                scheduler = lrs.ReduceLROnPlateau(
+                    optimizer, mode="min", factor=self.hparams.lr_decay_rate, patience=10
+                )
 
             else:
                 raise ValueError("Invalid lr_scheduler type!")

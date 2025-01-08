@@ -67,7 +67,7 @@ def main(args):
     trainer.validate(
         model=model,
         datamodule=data_module,
-        ckpt_path='/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/logs/dinov2_backbone_dinov2_large/lightning_logs/version_1/checkpoints/dinov2_backbone_epoch(15)_step(15632)_R1[0.8946]_R5[0.9554]_R10[0.9608].ckpt',
+        ckpt_path='logs/dinov2_backbone_dinov2_large/lightning_logs/version_9/checkpoints/dinov2_backbone_epoch(05)_step(5862)_R1[0.8662]_R5[0.9419]_R10[0.9568].ckpt',
     )
 
 

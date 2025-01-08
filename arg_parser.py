@@ -5,13 +5,18 @@ parser = ArgumentParser()
 # todo: Model Hyperparameters
 parser.add_argument("--model_name", default="dinov2_backbone", type=str)
 parser.add_argument("--backbone_size", default="dinov2_large", type=str)
+parser.add_argument("--lora_r", default=8, type=int)
+parser.add_argument("--lora_alpha", default=16, type=int)
+parser.add_argument("--lora_dropout", default=0.1, type=float)
 parser.add_argument("--finetune_last_n_layers", default=6, type=int)
 
 # todo:rerank
-parser.add_argument("--rerank", default=True, type=bool)
+parser.add_argument("--rerank", default=False, type=bool)
 parser.add_argument("--saliency_thresh", default=0.05, type=float)
-parser.add_argument("--nn_match_thresh", default=0.85, type=float)
-parser.add_argument("--facet_layer_and_facet", default={22: "value", 23: "attn"}, type=dict)
+parser.add_argument("--nn_match_thresh", default=0.65, type=float)
+parser.add_argument(
+    "--facet_layer_and_facet", default={22: "value", 23: "attn"}, type=dict
+)
 parser.add_argument("--include_cls", default=False, type=bool)
 parser.add_argument("--bin", default=False, type=bool)
 parser.add_argument("--hierarchy", default=2, type=int)
@@ -33,15 +38,15 @@ parser.add_argument(
     "--eval_datasets",
     default=[
         "mapillary_dataset",
-        'spedtest_dataset',
-        'tokyo247_dataset',
-        'nordland_dataset',
-        'pittsburg30k_dataset',
+        # 'spedtest_dataset',
+        # 'tokyo247_dataset',
+        # 'nordland_dataset',
+        # 'pittsburg30k_dataset',
         # 'pittsburg250k_dataset',
         # 'essex3in1_dataset',
         # 'gardenspoint_dataset',
-        'stlucia_dataset',
-        'eynsham_dataset',
+        # 'stlucia_dataset',
+        # 'eynsham_dataset',
         # 'svoxnight_dataset',
         # 'svoxrain_dataset',
         # 'amstertime_dataset',
@@ -67,7 +72,7 @@ parser.add_argument("--batch_size", default=64, type=int)
 # set number of process worker in dataloader
 parser.add_argument("--num_workers", default=15, type=int)
 # set init learning rate for global trainer
-parser.add_argument("--lr", default=1e-5, type=float)
+parser.add_argument("--lr", default=1e-4, type=float)
 # select optimizer. We have defined multiple optimizers in model_interface.py, we can select one for our study here.
 parser.add_argument(
     "--optimizer", choices=["sgd", "adamw", "adam"], default="adamw", type=str
@@ -87,14 +92,14 @@ parser.add_argument("--warmup_steps", default=100, type=int)
 parser.add_argument(
     "--lr_scheduler",
     choices=["step", "multi_step", "cosine", "linear", "exp"],
-    default="cosine",
+    default="exp",
     type=str,
 )
 
 # Set args for Different Scheduler
 # For CosineAnnealingLR
-parser.add_argument("--T_max", default=5, type=int)
-parser.add_argument("--eta_min", default=1e-6, type=float)
+# parser.add_argument("--T_max", default=5, type=int)
+# parser.add_argument("--eta_min", default=1e-6, type=float)
 
 # For StepLR
 # parser.add_argument('--lr_decay_steps', default=20, type=int)
@@ -111,7 +116,7 @@ parser.add_argument("--eta_min", default=1e-6, type=float)
 # parser.add_argument('--total_iters', default=1000 * 100, type=int)
 
 # For ExponentialLR
-# parser.add_argument('--gamma', default=0.99, type=float)
+parser.add_argument("--gamma", default=0.99, type=float)
 
 
 # todo: loss function
@@ -131,9 +136,9 @@ parser.add_argument(
 )
 
 # whether to use memory bank
-parser.add_argument("--memory_bank", default=False, type=bool)
+parser.add_argument("--memory_bank", default=True, type=bool)
 parser.add_argument("--memory_bank_start_epoch", default=0, type=int)
-
+parser.add_argument("--memory_bank_size", default=4096, type=int)  # 4*64*64
 # set margin for miner
 parser.add_argument("--miner_margin", default=0.1, type=float)
 

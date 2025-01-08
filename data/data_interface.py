@@ -12,55 +12,87 @@ from prettytable import PrettyTable
 class DInterface(pl.LightningDataModule):
     def __init__(self, **kwargs):
         super().__init__()
-        self.kwargs = kwargs
-        self._init_config(kwargs)
-        self._init_transforms()
-        self._init_dataloader_config()
-        self.save_hyperparameters()
 
-    def _init_config(self, kwargs):
-        # 将配置参数初始化集中到一个方法中
+        self.kwargs = kwargs
+        # get train/eval/test dataset name list from kwargs
         self.train_dataset = kwargs["train_dataset"]
         self.eval_dataset = kwargs["eval_datasets"]
+
         self.num_workers = kwargs["num_workers"]
+        # get batch size from kwargs
         self.batch_size = kwargs["batch_size"]
+        # get train image size from kwargs
         self.image_size_train = kwargs["image_size_train"]
         self.image_size_eval = kwargs["image_size_eval"]
+        # get shuffle for GSVCites
         self.shuffle_all = kwargs["shuffle_all"]
+        # get img_per_place for GSVCitess
         self.img_per_place = kwargs["img_per_place"]
+        # get min_img_per_place for GSVCites
         self.min_img_per_place = kwargs["min_img_per_place"]
+        # get random_sample_from_each_place for GSVCites
         self.random_sample_from_each_place = kwargs["random_sample_from_each_place"]
+        # get persistent_workers fro dataloader
         self.persistent_workers = kwargs["persistent_workers"]
-        
-    def _init_transforms(self):
-        # 将transforms初始化集中到一个方法中
-        mean_std = {"mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
-        
-        self.train_transform = T.Compose([
-            T.Resize(tuple(self.image_size_train), interpolation=T.InterpolationMode.BILINEAR),
-            T.RandAugment(num_ops=3, interpolation=T.InterpolationMode.BILINEAR),
-            T.ToTensor(),
-            T.Normalize(**mean_std),
-        ])
-        
-        self.valid_transform = T.Compose([
-            T.Resize(tuple(self.image_size_eval), interpolation=T.InterpolationMode.BILINEAR),
-            T.ToTensor(),
-            T.Normalize(**mean_std),
-        ])
 
-    def _init_dataloader_config(self):
-        # 将dataloader配置集中到一个方法中
-        base_config = {
+        # define image mean and std
+        self.mean_std = {"mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
+
+        # define transform for training dataset
+        self.train_transform = T.Compose(
+            [
+                T.Resize(
+                    tuple(self.image_size_train),
+                    interpolation=T.InterpolationMode.BILINEAR,
+                ),
+                # RandAugment: 随机数据增强
+                # num_ops: 每张图像应用的增强操作数量
+                # 默认参数说明:
+                # magnitude: 增强强度(0-9), 默认为9
+                # num_magnitude_bins: 增强强度的离散化区间数量, 默认为31
+                # interpolation: 用于几何变换的插值方法
+                T.RandAugment(
+                    num_ops=3,
+                    interpolation=T.InterpolationMode.BILINEAR
+                ),
+                T.ToTensor(),
+                T.Normalize(mean=self.mean_std["mean"], std=self.mean_std["std"]),
+            ]
+        )
+
+        # define transform for training dataset
+        self.valid_transform = T.Compose(
+            [
+                T.Resize(
+                    tuple(self.image_size_eval),
+                    interpolation=T.InterpolationMode.BILINEAR,
+                ),
+                T.ToTensor(),
+                T.Normalize(mean=self.mean_std["mean"], std=self.mean_std["std"]),
+            ]
+        )
+
+        # define config for train dataloader
+        self.train_loader_config = {
             "batch_size": self.batch_size,
             "num_workers": self.num_workers,
             "drop_last": False,
             "pin_memory": True,
+            "shuffle": self.shuffle_all,
             "persistent_workers": self.persistent_workers,
         }
-        
-        self.train_loader_config = {**base_config, "shuffle": self.shuffle_all}
-        self.valid_loader_config = {**base_config, "shuffle": False} # 不打乱数据集顺序，便于重排序
+
+        # define config for valid dataloader
+        self.valid_loader_config = {
+            "batch_size": self.batch_size,
+            "num_workers": self.num_workers,
+            "drop_last": False,
+            "pin_memory": True,
+            "shuffle": False,
+            "persistent_workers": self.persistent_workers,
+        }
+
+        self.save_hyperparameters()  # save hyperparameter with Pytorch Lightening
 
     def load_data_module(self, dataset_name):
         # Change the `snake_case.py` file name to `CamelCase` class name.
@@ -137,13 +169,13 @@ class DInterface(pl.LightningDataModule):
                 self.test_set.append(self.instancialize(self.load_data_module(item)))
 
     def train_dataloader(self):
-        dataset_cls = self.load_data_module(self.train_dataset)
-        self.train_set = dataset_cls(
+        # if there is only one train dataset, return its DataLoader
+        self.train_set = self.instancialize(
+            self.load_data_module(self.train_dataset),
             img_per_place=self.img_per_place,
             min_img_per_place=self.min_img_per_place,
             random_sample_from_each_place=self.random_sample_from_each_place,
             transform=self.train_transform,
-            **self.kwargs
         )
         return DataLoader(self.train_set, **self.train_loader_config)
 
