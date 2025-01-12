@@ -61,14 +61,14 @@ def main(args):
     )
 
     # train and eval model using train_dataloader and eval_dataloader
-    # trainer.fit(model, data_module)
+    trainer.fit(model, data_module)
 
     # validate model using defined test_dataloader, you have to set the ckpt_path
-    trainer.validate(
-        model=model,
-        datamodule=data_module,
-        ckpt_path='logs/dinov2_backbone_dinov2_large/lightning_logs/version_9/checkpoints/dinov2_backbone_epoch(05)_step(5862)_R1[0.8662]_R5[0.9419]_R10[0.9568].ckpt',
-    )
+    # trainer.validate(
+    #     model=model,
+    #     datamodule=data_module,
+    #     ckpt_path='logs/dinov2_backbone_dinov2_large/lightning_logs/version_9/checkpoints/dinov2_backbone_epoch(05)_step(5862)_R1[0.8662]_R5[0.9419]_R10[0.9568].ckpt',
+    # )
 
 
 if __name__ == "__main__":

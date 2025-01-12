@@ -2,7 +2,6 @@ import torch.nn as nn
 from torch.hub import load
 import torch.nn.functional as F
 import torch
-from xformers.ops import unbind, memory_efficient_attention
 
 dinov2_backbones = {
     "dinov2_small": {
@@ -99,7 +98,6 @@ class Dinov2Backbone(nn.Module):
 
 if __name__ == "__main__":
     from torchvision import transforms
-    from PIL import Image
     import torch
 
     model = Dinov2Backbone(backbone_size="dinov2_large", finetune_last_n_layers=1).cuda()

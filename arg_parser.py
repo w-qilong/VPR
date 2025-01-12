@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 parser = ArgumentParser()
 
 # todo: Model Hyperparameters
-parser.add_argument("--model_name", default="dinov2_backbone", type=str)
+parser.add_argument("--model_name", default="dinov2_adapter", type=str)
 parser.add_argument("--backbone_size", default="dinov2_large", type=str)
 parser.add_argument("--lora_r", default=8, type=int)
 parser.add_argument("--lora_alpha", default=16, type=int)
@@ -27,7 +27,7 @@ parser.add_argument("--hierarchy", default=2, type=int)
 parser.add_argument("--train_dataset", default="gsvcities_dataset", type=str)
 # args for training dataset GSVCities
 parser.add_argument("--image_size_train", default=[224, 224], type=list)
-parser.add_argument("--image_size_eval", default=[560, 560], type=list)
+parser.add_argument("--image_size_eval", default=[224, 224], type=list)
 parser.add_argument("--shuffle_all", default=True, type=bool)
 parser.add_argument("--img_per_place", default=4, type=int)
 parser.add_argument("--min_img_per_place", default=4, type=int)
@@ -72,7 +72,7 @@ parser.add_argument("--batch_size", default=64, type=int)
 # set number of process worker in dataloader
 parser.add_argument("--num_workers", default=15, type=int)
 # set init learning rate for global trainer
-parser.add_argument("--lr", default=1e-4, type=float)
+parser.add_argument("--lr", default=1e-3, type=float)
 # select optimizer. We have defined multiple optimizers in model_interface.py, we can select one for our study here.
 parser.add_argument(
     "--optimizer", choices=["sgd", "adamw", "adam"], default="adamw", type=str
@@ -86,7 +86,7 @@ parser.add_argument("--weight_decay", default=9.5e-09, type=float)
 # Here, we can use gradual warmup to , i.e., start with an initially small learning rate,
 # and increase a little bit for each STEP until the initially set relatively large learning rate is reached,
 # and then use the initially set learning rate for training.
-parser.add_argument("--warmup_steps", default=100, type=int)
+parser.add_argument("--warmup_steps", default=200, type=int)
 
 # select lr_scheduler. We have defined multiple lr_scheduler in model_interface.py, we can select one for our study here.
 parser.add_argument(
@@ -102,7 +102,7 @@ parser.add_argument(
 # parser.add_argument("--eta_min", default=1e-6, type=float)
 
 # For StepLR
-# parser.add_argument('--lr_decay_steps', default=20, type=int)
+# parser.add_argument('--lr_decay_steps', default=3, type=int)
 # parser.add_argument('--lr_decay_rate', default=0.5, type=float)
 
 # For MultiStepLR
@@ -135,12 +135,13 @@ parser.add_argument(
     type=str,
 )
 
-# whether to use memory bank
-parser.add_argument("--memory_bank", default=True, type=bool)
-parser.add_argument("--memory_bank_start_epoch", default=0, type=int)
-parser.add_argument("--memory_bank_size", default=4096, type=int)  # 4*64*64
 # set margin for miner
 parser.add_argument("--miner_margin", default=0.1, type=float)
+
+# whether to use memory bank
+parser.add_argument("--memory_bank", default=False, type=bool)
+parser.add_argument("--memory_bank_start_epoch", default=5, type=int)
+parser.add_argument("--memory_bank_size", default=2048, type=int)  # 4*64*64
 
 # whether to use gpu for calculate distance for validation
 parser.add_argument("--faiss_gpu", default=False, type=bool)

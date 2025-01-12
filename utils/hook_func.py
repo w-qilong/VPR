@@ -3,6 +3,8 @@ from typing import Dict, List, Tuple
 import torch
 from torch.nn import functional as F
 import os
+import einops as ein
+import torchvision.transforms as T
 
 import numpy as np
 from sklearn.cluster import KMeans
@@ -838,6 +840,287 @@ def draw_correspondences_with_lines(
     ax.set_ylim(-10, max(image1.size[1], image2.size[1]) + 10)
     
     return fig
+
+def compute_visual_similarity(
+    source_path: str,
+    target_path: str,
+    model: torch.nn.Module,
+    query_point: Tuple[int, int] = (280, 280),
+    layer_idx: int = 22,
+    image_size: int = 560,
+    device: str = "cuda"
+) -> Tuple[Dict[str, np.ndarray], Image.Image, Image.Image]:
+    """
+    计算两张图片指定位置的视觉特征相似度。
+    
+    Args:
+        source_path: 源图像路径（查询图像）
+        target_path: 目标图像路径（对比图像）
+        model: 预训练的视觉Transformer模型
+        query_point: 查询点坐标 (x, y)，默认(280, 280)
+        layer_idx: 提取特征的transformer层索引，默认22
+        image_size: 处理图像的大小，默认560
+        device: 计算设备，默认"cuda"
+    
+    Returns:
+        Tuple[Dict[str, np.ndarray], Image.Image, Image.Image]:
+            - 特征相似度字典，包含'key', 'query', 'value', 'token'四种特征的相似度图
+            - 源图像PIL对象
+            - 目标图像PIL对象
+    """
+    # 1. 图像预处理
+    patch_size = 14
+    num_patches = image_size // patch_size
+    
+    transform = _create_image_transform(image_size)
+    source_img, target_img, source_pil, target_pil = _load_and_preprocess_images(
+        source_path, target_path, transform, device
+    )
+    
+    # 2. 计算特征相似度
+    similarity_maps = {}
+    hook_outputs = []
+    
+    for feature_type in ["key", "query", "value", "token"]:
+        # 提取特征
+        source_feat, target_feat = _extract_features(
+            model, source_img, target_img, feature_type, 
+            layer_idx, hook_outputs
+        )
+        
+        # 计算相似度图
+        similarity_map = _compute_similarity_map(
+            source_feat, target_feat,
+            query_point, num_patches, image_size
+        )
+        similarity_maps[feature_type] = similarity_map
+    
+    return similarity_maps, source_pil.resize((image_size, image_size)), target_pil.resize((image_size, image_size))
+
+def _create_image_transform(image_size: int) -> T.Compose:
+    """创建图像预处理转换"""
+    return T.Compose([
+        T.Resize((image_size, image_size), 
+                 interpolation=T.InterpolationMode.BILINEAR),
+        T.ToTensor(),
+        T.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        )
+    ])
+
+def _load_and_preprocess_images(
+    source_path: str,
+    target_path: str,
+    transform: T.Compose,
+    device: str
+) -> Tuple[torch.Tensor, torch.Tensor, Image.Image, Image.Image]:
+    """加载并预处理图像"""
+    source_pil = Image.open(source_path).convert("RGB")
+    target_pil = Image.open(target_path).convert("RGB")
+    
+    source_tensor = transform(source_pil).unsqueeze(0).to(device)
+    target_tensor = transform(target_pil).unsqueeze(0).to(device)
+    
+    return source_tensor, target_tensor, source_pil, target_pil
+
+def _extract_features(
+    model: torch.nn.Module,
+    source_img: torch.Tensor,
+    target_img: torch.Tensor,
+    feature_type: str,
+    layer_idx: int,
+    hook_outputs: List
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """提取特定类型的特征"""
+    hook_outputs.clear()
+    
+    def _forward_hook(module, inputs, output):
+        hook_outputs.append(output)
+    
+    # 注册hook
+    if feature_type == "token":
+        hook = model.blocks[layer_idx].register_forward_hook(_forward_hook)
+    else:
+        hook = model.blocks[layer_idx].attn.qkv.register_forward_hook(_forward_hook)
+    
+    # 提取特征
+    with torch.no_grad():
+        model(source_img)
+        model(target_img)
+        
+        source_feat = hook_outputs[0][:, 1:]  # 移除CLS token
+        target_feat = hook_outputs[1][:, 1:]
+        
+        if feature_type != "token":
+            source_feat, target_feat = _split_qkv_features(
+                source_feat, target_feat, feature_type
+            )
+        
+        # 特征归一化
+        source_feat = F.normalize(source_feat, dim=-1)
+        target_feat = F.normalize(target_feat, dim=-1)
+    
+    hook.remove()
+    return source_feat, target_feat
+
+def _split_qkv_features(
+    source_feat: torch.Tensor,
+    target_feat: torch.Tensor,
+    feature_type: str
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """分离QKV特征"""
+    feature_dim = source_feat.shape[2] // 3
+    feature_indices = {
+        "query": (0, feature_dim),
+        "key": (feature_dim, 2*feature_dim),
+        "value": (2*feature_dim, 3*feature_dim)
+    }
+    start_idx, end_idx = feature_indices[feature_type]
+    
+    return (
+        source_feat[:, :, start_idx:end_idx],
+        target_feat[:, :, start_idx:end_idx]
+    )
+
+def _compute_similarity_map(
+    source_feat: torch.Tensor,
+    target_feat: torch.Tensor,
+    query_point: Tuple[int, int],
+    num_patches: int,
+    image_size: int
+) -> np.ndarray:
+    """计算特征相似度图"""
+    # 重排特征维度并插值到目标大小
+    source_feat = ein.rearrange(
+        source_feat[0],
+        "(p_h p_w) d -> d p_h p_w",
+        p_h=num_patches,
+        p_w=num_patches
+    )[None]
+    
+    target_feat = ein.rearrange(
+        target_feat[0],
+        "(p_h p_w) d -> d p_h p_w",
+        p_h=num_patches,
+        p_w=num_patches
+    )[None]
+    
+    source_feat = F.interpolate(
+        source_feat,
+        size=(image_size, image_size),
+        mode='nearest'
+    )
+    target_feat = F.interpolate(
+        target_feat,
+        size=(image_size, image_size),
+        mode='nearest'
+    )
+    
+    # 提取查询点特征并计算相似度
+    query_feat = source_feat[[0], ..., query_point[1], query_point[0]]
+    query_feat = ein.repeat(
+        query_feat,
+        "1 d -> 1 d h w",
+        h=image_size,
+        w=image_size
+    )
+    
+    similarity = F.cosine_similarity(target_feat, query_feat, dim=1).detach().cpu().numpy()
+    return ein.rearrange(
+        similarity,
+        "1 h w -> h w 1"
+    )
+
+
+def create_attention_similarity_plot(
+    source_image: Image.Image,
+    target_image: Image.Image,
+    attention_maps: dict,
+    source_point: tuple,
+    max_positions: dict,
+    fig_size: tuple = (36, 8),
+    dpi: int = 500
+) -> None:
+    """可视化注意力相似度图和关键点位置
+    
+    Args:
+        source_image: 源图像PIL对象
+        target_image: 目标图像PIL对象
+        attention_maps: 包含key/query/value/token的注意力图字典
+        source_point: 源图像上的查询点坐标 (x,y)
+        max_positions: 包含各注意力图最大值位置的字典
+        fig_size: 图像大小
+        dpi: 图像分辨率
+    """
+    
+    # 设置绘图样式
+    plt.rcParams.update({
+        'font.family': 'Times New Roman',
+        'font.size': 24
+    })
+    
+    # 标记点样式
+    marker_props = {
+        "ms": 20,           # marker size
+        "mew": 2,          # marker edge width
+        "mec": 'white',    # marker edge color
+        "alpha": 0.5       # transparency
+    }
+    
+    # 注意力类型对应的颜色
+    attention_colors = {
+        "key": "tab:pink",
+        "query": "tab:brown", 
+        "value": "tab:orange",
+        "token": "tab:purple",
+        "prompt": "red"
+    }
+    
+    # 创建画布和网格
+    fig = plt.figure(figsize=fig_size, dpi=dpi)
+    gs = fig.add_gridspec(1, 6)
+    
+    # 绘制源图像
+    ax_source = fig.add_subplot(gs[0, 0])
+    ax_source.imshow(source_image)
+    ax_source.plot(*source_point, 'o', c=attention_colors["prompt"], **marker_props)
+    ax_source.axis('off')
+    ax_source.set_title("Source Image", pad=10)
+    
+    # 绘制目标图像和最大响应点
+    ax_target = fig.add_subplot(gs[0, 1])
+    ax_target.imshow(target_image)
+    for attn_type in ["key", "query", "value", "token"]:
+        pos = max_positions[attn_type]
+        ax_target.plot(pos[1], pos[0], 'o', 
+                      label=attn_type,
+                      c=attention_colors[attn_type], 
+                      **marker_props)
+    ax_target.axis('off')
+    ax_target.set_title("Target Image", pad=10)
+    
+    # 绘制注意力图
+    def normalize_attention(x):
+        """归一化注意力图到0-255范围"""
+        return (((x/2.0) + 0.5) * 255).astype(np.uint8)
+    
+    for idx, attn_type in enumerate(["key", "query", "value", "token"]):
+        ax = fig.add_subplot(gs[0, idx+2])
+        ax.set_title(attn_type.capitalize(), pad=10)
+        ax.imshow(normalize_attention(attention_maps[attn_type]), 
+                 vmin=0, vmax=255, cmap="jet")
+        ax.axis('off')
+    
+    # 添加图例
+    fig.legend(loc="lower center", ncol=4,
+              bbox_to_anchor=(0.01, 0.01, 0.3, 0.08),
+              mode="expand", frameon=False, fontsize=30)
+    
+    plt.tight_layout(pad=1.0, w_pad=0.8, h_pad=0.8)
+    
+    return fig
+
 
 
 
