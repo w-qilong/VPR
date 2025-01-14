@@ -109,7 +109,6 @@ class Dinov2Losa(nn.Module):
             ]
         )
 
-        self.task_head = nn.Linear(input_dim, self.output_dim)  # output_dim
 
     def _load_model(self):
         """加载预训练模型"""
@@ -149,8 +148,6 @@ class Dinov2Losa(nn.Module):
             backbone_feature = backbone_outputs[i] # batch_size, seq_len, input_dim
             y = adapter(backbone_feature + y) + y
  
-        # Task-specific head
-        logits = self.task_head(y[:, 0])  # Use mean pooling along seq_len for classification
         return logits
 
 

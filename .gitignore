@@ -6,6 +6,7 @@ imgs/
 __pycache__/
 sample_imgs/
 tmp_imgs/
+some_result_images/
 *.pyc
 
 

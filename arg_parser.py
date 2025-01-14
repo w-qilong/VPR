@@ -3,12 +3,13 @@ from argparse import ArgumentParser
 parser = ArgumentParser()
 
 # todo: Model Hyperparameters
-parser.add_argument("--model_name", default="dinov2_adapter", type=str)
+parser.add_argument("--model_name", default="dinov2_backbone", type=str)
 parser.add_argument("--backbone_size", default="dinov2_large", type=str)
 parser.add_argument("--lora_r", default=8, type=int)
 parser.add_argument("--lora_alpha", default=16, type=int)
 parser.add_argument("--lora_dropout", default=0.1, type=float)
 parser.add_argument("--finetune_last_n_layers", default=6, type=int)
+parser.add_argument("--reduced_dim", default=1024, type=int)
 
 # todo:rerank
 parser.add_argument("--rerank", default=False, type=bool)
@@ -27,7 +28,7 @@ parser.add_argument("--hierarchy", default=2, type=int)
 parser.add_argument("--train_dataset", default="gsvcities_dataset", type=str)
 # args for training dataset GSVCities
 parser.add_argument("--image_size_train", default=[224, 224], type=list)
-parser.add_argument("--image_size_eval", default=[224, 224], type=list)
+parser.add_argument("--image_size_eval", default=[322, 322], type=list)
 parser.add_argument("--shuffle_all", default=True, type=bool)
 parser.add_argument("--img_per_place", default=4, type=int)
 parser.add_argument("--min_img_per_place", default=4, type=int)
@@ -38,25 +39,25 @@ parser.add_argument(
     "--eval_datasets",
     default=[
         "mapillary_dataset",
-        # 'spedtest_dataset',
-        # 'tokyo247_dataset',
-        # 'nordland_dataset',
-        # 'pittsburg30k_dataset',
+        'spedtest_dataset',
+        'tokyo247_dataset',
+        'nordland_dataset',
+        'pittsburg30k_dataset',
         # 'pittsburg250k_dataset',
         # 'essex3in1_dataset',
         # 'gardenspoint_dataset',
-        # 'stlucia_dataset',
-        # 'eynsham_dataset',
-        # 'svoxnight_dataset',
-        # 'svoxrain_dataset',
-        # 'amstertime_dataset',
+        'stlucia_dataset',
+        'eynsham_dataset',
+        'svoxnight_dataset',
+        'svoxrain_dataset',
+        'amstertime_dataset',
     ],
     type=list,
 )
 
 # set monitor dataset
 parser.add_argument("--monitor_metric", default="mapillary_dataset", type=str)
-parser.add_argument("--recall_top_k", default=[1, 5, 10, 20], type=list)
+parser.add_argument("--recall_top_k", default=[1, 5, 10], type=list)
 
 # todo: Basic Training Control for global trainer
 # set random seed
@@ -66,17 +67,15 @@ parser.add_argument("--accelerator", default="gpu", type=str)
 # select GPU device
 parser.add_argument("--devices", default=[0], type=list)
 # set training epochs
-parser.add_argument("--epochs", default=60, type=int)
+parser.add_argument("--epochs", default=30, type=int)
 # set batch size
 parser.add_argument("--batch_size", default=64, type=int)
 # set number of process worker in dataloader
 parser.add_argument("--num_workers", default=15, type=int)
 # set init learning rate for global trainer
-parser.add_argument("--lr", default=1e-3, type=float)
+parser.add_argument("--lr", default=1e-5, type=float)
 # select optimizer. We have defined multiple optimizers in model_interface.py, we can select one for our study here.
-parser.add_argument(
-    "--optimizer", choices=["sgd", "adamw", "adam"], default="adamw", type=str
-)
+parser.add_argument("--optimizer", choices=["sgd", "adamw", "adam"], default="adam", type=str)
 # set momentum of optimizer. It should set for sgd. When we use adam or adamw optimizer, no need to set it
 parser.add_argument("--momentum", default=0.9, type=float)
 # set weight_decay rate for optimizer
@@ -91,8 +90,8 @@ parser.add_argument("--warmup_steps", default=200, type=int)
 # select lr_scheduler. We have defined multiple lr_scheduler in model_interface.py, we can select one for our study here.
 parser.add_argument(
     "--lr_scheduler",
-    choices=["step", "multi_step", "cosine", "linear", "exp"],
-    default="exp",
+    choices=["none", "step", "multi_step", "cosine", "linear", "exp"],
+    default="none",
     type=str,
 )
 
@@ -139,8 +138,8 @@ parser.add_argument(
 parser.add_argument("--miner_margin", default=0.1, type=float)
 
 # whether to use memory bank
-parser.add_argument("--memory_bank", default=False, type=bool)
-parser.add_argument("--memory_bank_start_epoch", default=5, type=int)
+parser.add_argument("--memory_bank", default=True, type=bool)
+parser.add_argument("--memory_bank_start_epoch", default=3, type=int)
 parser.add_argument("--memory_bank_size", default=2048, type=int)  # 4*64*64
 
 # whether to use gpu for calculate distance for validation
@@ -152,7 +151,7 @@ parser.add_argument("--gradient_accumulate_start_epoch", default=0, type=int)
 parser.add_argument("--gradient_accumulate_factor", default=2, type=int)
 
 # whether to use early stopping
-parser.add_argument("--use_early_stopping", default=True, type=bool)
+parser.add_argument("--use_early_stopping", default=False, type=bool)
 parser.add_argument("--patience", default=5, type=int)
 
 # set if StochasticWeightAveraging need to be used

@@ -25,6 +25,8 @@ class MyTQDMProgressBar(TQDMProgressBar):
 def load_callbacks(args):
     callbacks = []
 
+    monitor_metric = args.monitor_metric + '/R1' if not args.rerank else args.monitor_metric + '_rerank/R1'
+
     # use EarlyStopping.
     # The model will stop training after patience epoch where the monitor value (val_acc) is no longer increasing.
     # minimum change in the monitored quantity to qualify as an improvement,
@@ -33,7 +35,7 @@ def load_callbacks(args):
     #  Same process should be setted in plc.ModelCheckpoint.
     if args.use_early_stopping:
         callbacks.append(plc.EarlyStopping(
-            monitor=args.monitor_metric + '/R1',  # todo: change the monitor metric for your dataset
+            monitor=monitor_metric,  # todo: change the monitor metric for your dataset
             mode='max',
             patience=args.patience,
             min_delta=0.00001
@@ -42,7 +44,7 @@ def load_callbacks(args):
     #  the best k models according to the quantity monitored will be saved.
     callbacks.append(plc.ModelCheckpoint(
         # todo: change the monitor metric for your dataset
-        monitor=args.monitor_metric + '/R1',
+        monitor=monitor_metric,
         # todo: change the monitor metric for your dataset
         filename=f'{args.model_name}' +
                  '_epoch({epoch:02d})_step({step:04d})_R1[{' + args.monitor_metric +

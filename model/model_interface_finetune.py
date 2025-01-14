@@ -11,6 +11,17 @@ from utils import validation
 from pytorch_metric_learning.losses import CrossBatchMemory
 from losses import MetricLoss
 from utils import hook_func
+from PIL import Image
+import os
+
+# 实例化两个pair图像，用于记录模型训练过程中，特征提取器提取的特征
+img_paths=[
+    '/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/sample_imgs/msls/0/ref/2aV9pmF-e-EFr3ZIrYupUQ.jpg',
+    '/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/sample_imgs/msls/0/query/XZ7v6ZL7Cn5eOgZv4y4wBw.jpg',
+    '/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/sample_imgs/nordland/7/query/@0@62302.4@@@@@26167@@@@@@@@.jpg',
+    '/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/sample_imgs/nordland/7/ref/@0@62290.5@@@@@26162@@@@@@@@.jpg'
+]
+tmp_imgs = [Image.open(img_path).convert('RGB') for img_path in img_paths]
 
 
 class AggMInterface(pl.LightningModule):
@@ -109,11 +120,25 @@ class AggMInterface(pl.LightningModule):
         # update params
         optimizer.step(closure=optimizer_closure)
 
+    def on_train_start(self):
+        # 初始化列表存储特征
+        self.feats_list = []
+
+    def on_train_end(self):
+        # 序列化
+        save_path=os.path.join(self.trainer.default_root_dir, 'feats_list.pth')
+        torch.save(self.feats_list, save_path)
+
     def on_train_epoch_start(self):
         # 我们将跟踪损失层面上无效对/三元组的百分比
         self.triplet_batch_acc = []
 
-    def training_step(self, batch, batch_idx):
+        # 将图像转换为张量
+        transform = self.trainer.datamodule.valid_transform
+        self.tmp_imgs = torch.stack([transform(img) for img in tmp_imgs])
+
+    def training_step(self, batch, batch_idx):       
+        # 获取batch数据
         places, labels = batch
 
         # 注意GSVCities生成的places(每个包含N张图像)
@@ -160,8 +185,19 @@ class AggMInterface(pl.LightningModule):
         # log metric loss and local loss
         self.log("metric_loss", metric_loss, prog_bar=True, logger=True)
 
+        # 保存特征
+        self.predict_step(batch, batch_idx)
+
         # return total loss
         return {"loss": metric_loss}
+    
+    def predict_step(self, batch, batch_idx):
+        # 获取batch数据
+        with torch.no_grad():
+            self.model.eval()
+            batch_feats = self.forward(self.tmp_imgs.cuda())
+            self.feats_list.append(batch_feats.detach().cpu())
+
 
     def on_train_epoch_end(self):
         # we empty the batch_acc list for next epoch
@@ -454,8 +490,8 @@ class AggMInterface(pl.LightningModule):
             )
 
         # Use lr_scheduler
-        if not self.hparams.lr_scheduler:
-            return optimizer
+        if self.hparams.lr_scheduler == "none":
+            return [optimizer]  # 不使用调度器
         else:
             if self.hparams.lr_scheduler == "step":
                 scheduler = lrs.StepLR(

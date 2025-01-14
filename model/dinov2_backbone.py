@@ -64,6 +64,7 @@ class Dinov2Backbone(nn.Module):
         self.interpolate_offset = self.model.interpolate_offset
         self.stride = self.model.patch_embed.proj.stride
 
+
     def _load_model(self):
         """加载预训练模型"""
         self.model = load(
@@ -100,7 +101,7 @@ if __name__ == "__main__":
     from torchvision import transforms
     import torch
 
-    model = Dinov2Backbone(backbone_size="dinov2_large", finetune_last_n_layers=1).cuda()
+    model = Dinov2Backbone(backbone_size="dinov2_large", finetune_last_n_layers=1, reduced_dim=1024).cuda()
 
     print(model)
 
