@@ -13,15 +13,7 @@ from losses import MetricLoss
 from utils import hook_func
 from PIL import Image
 import os
-
-# 实例化两个pair图像，用于记录模型训练过程中，特征提取器提取的特征
-img_paths=[
-    '/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/sample_imgs/msls/0/ref/2aV9pmF-e-EFr3ZIrYupUQ.jpg',
-    '/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/sample_imgs/msls/0/query/XZ7v6ZL7Cn5eOgZv4y4wBw.jpg',
-    '/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/sample_imgs/nordland/7/query/@0@62302.4@@@@@26167@@@@@@@@.jpg',
-    '/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/sample_imgs/nordland/7/ref/@0@62290.5@@@@@26162@@@@@@@@.jpg'
-]
-tmp_imgs = [Image.open(img_path).convert('RGB') for img_path in img_paths]
+import pandas as pd
 
 
 class AggMInterface(pl.LightningModule):
@@ -87,7 +79,7 @@ class AggMInterface(pl.LightningModule):
     def configure_loss(self):
         # 定义损失函数
         self.metric_loss_function = self.hparams.metric_loss_function
-        if self.metric_loss_function in ["MultiSimilarityLoss", "TripletMarginLoss"]:
+        if self.metric_loss_function in ["MultiSimilarityLoss", "TripletMarginLoss", "ContrastiveLoss", "NCALoss"]:
             self.metric_loss_function = MetricLoss(
                 self.metric_loss_function, margin=self.hparams.miner_margin
             )
@@ -121,22 +113,40 @@ class AggMInterface(pl.LightningModule):
         optimizer.step(closure=optimizer_closure)
 
     def on_train_start(self):
-        # 初始化列表存储特征
-        self.feats_list = []
+
+        if self.hparams.save_neg_num:
+            # 初始化列表存储负样本数量
+            self.neg_num_list = []
+
+        # 初始化图像
+        if self.hparams.save_feats:
+            # 初始化列表存储特征
+            self.feats_list = []
+            # 实例化两个pair图像，用于记录模型训练过程中，特征提取器提取的特征
+            self.img_paths=[
+                'tmp_imgs/00010.jpg',
+                'tmp_imgs/00012.jpg',
+                'tmp_imgs/0000046.jpg',
+                'tmp_imgs/0000047.jpg'
+            ]
+            self.tmp_imgs = [Image.open(img_path).convert('RGB') for img_path in self.img_paths]
+            transform = self.trainer.datamodule.valid_transform
+            self.tmp_imgs = torch.stack([transform(img) for img in self.tmp_imgs])
 
     def on_train_end(self):
         # 序列化
-        save_path=os.path.join(self.trainer.default_root_dir, 'feats_list.pth')
-        torch.save(self.feats_list, save_path)
+        if self.hparams.save_feats:
+            save_path=os.path.join(self.trainer.log_dir, 'feats_list.pth')
+            torch.save(self.feats_list, save_path)
+
+        if self.hparams.save_neg_num:    
+            save_path=os.path.join(self.trainer.log_dir, 'neg_num_list.pth')
+            torch.save(self.neg_num_list, save_path)
 
     def on_train_epoch_start(self):
         # 我们将跟踪损失层面上无效对/三元组的百分比
         self.triplet_batch_acc = []
-
-        # 将图像转换为张量
-        transform = self.trainer.datamodule.valid_transform
-        self.tmp_imgs = torch.stack([transform(img) for img in tmp_imgs])
-
+            
     def training_step(self, batch, batch_idx):       
         # 获取batch数据
         places, labels = batch
@@ -154,22 +164,39 @@ class AggMInterface(pl.LightningModule):
 
         if (
             self.hparams.memory_bank
-            and self.trainer.current_epoch > self.hparams.memory_bank_start_epoch
+            and self.trainer.current_epoch >= self.hparams.memory_bank_start_epoch
         ):
-            metric_loss = self.memory_bank(cls_token, labels)
+            # 使用memory bank
+            metric_loss, miner_outputs = self.memory_bank(cls_token, labels)
+            
+            # 记录负样本数量
+            if self.hparams.save_neg_num:
+                # 使用memory bank
+                a1, p, a2, n2 = miner_outputs
+                # 不使用memory bank
+                with torch.no_grad():
+                    _, miner_outputs = self.metric_loss_function(cls_token, labels)
+                    a1, p, a2, n1 = miner_outputs
+                self.neg_num_list.append([len(n1), len(n2)])
+
         else:
             # 计算度量损失
             metric_loss, miner_outputs = self.metric_loss_function(cls_token, labels)
 
             # calculate the % of trivial pairs/triplets which do not contribute in the loss value
             nb_samples = cls_token.shape[0]
-            nb_mined = len(set(miner_outputs[0].detach().cpu().numpy()))
-            triplet_batch_acc = 1.0 - (nb_mined / nb_samples)
+
+            # 当使用NCALoss时，没有miner
+            if self.metric_loss_function.miner:
+                nb_mined = len(set(miner_outputs[0].detach().cpu().numpy()))
+                triplet_batch_acc = 1.0 - (nb_mined / nb_samples)
+            else:
+                triplet_batch_acc = 0.0
 
             # get mean accuracy
             self.triplet_batch_acc.append(triplet_batch_acc)
             self.log(
-                "triplet_mean_acc",
+                "mean_acc",
                 sum(self.triplet_batch_acc) / len(self.triplet_batch_acc),
                 prog_bar=True,
                 logger=True,
@@ -186,7 +213,8 @@ class AggMInterface(pl.LightningModule):
         self.log("metric_loss", metric_loss, prog_bar=True, logger=True)
 
         # 保存特征
-        self.predict_step(batch, batch_idx)
+        if self.hparams.save_feats:
+            self.predict_step(batch, batch_idx)
 
         # return total loss
         return {"loss": metric_loss}
@@ -194,10 +222,8 @@ class AggMInterface(pl.LightningModule):
     def predict_step(self, batch, batch_idx):
         # 获取batch数据
         with torch.no_grad():
-            self.model.eval()
             batch_feats = self.forward(self.tmp_imgs.cuda())
             self.feats_list.append(batch_feats.detach().cpu())
-
 
     def on_train_epoch_end(self):
         # we empty the batch_acc list for next epoch
@@ -209,6 +235,13 @@ class AggMInterface(pl.LightningModule):
         self.val_cls_outputs = [
             [] for _ in range(len(self.trainer.datamodule.eval_set))
         ]
+
+        # 初始化列表，用于存储排序结果
+        self.val_results = dict()                   
+
+        if self.hparams.rerank:
+            # 初始化列表，用于存储重排序结果
+            self.val_rerank_results = dict()
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         with torch.no_grad():
@@ -273,6 +306,9 @@ class AggMInterface(pl.LightningModule):
                     f"{val_set_name}/R{k}", pitts_dict[k], prog_bar=False, logger=True
                 )
 
+            # 保存第一次结果
+            self.val_results[val_set_name] = pitts_dict
+
             if self.hparams.rerank:
 
                 # 第二次排序
@@ -292,6 +328,9 @@ class AggMInterface(pl.LightningModule):
                         f"{val_set_name}_rerank/R{k}", d[k], prog_bar=False, logger=True
                     )
 
+                # 保存第二次结果
+                self.val_rerank_results[val_set_name] = d
+
                 del d, rerank_predictions
 
             # 清理内存
@@ -304,6 +343,17 @@ class AggMInterface(pl.LightningModule):
             torch.cuda.empty_cache()
 
             print("\n")
+
+        # 保存第一次结果
+        save_path=os.path.join(self.trainer.log_dir, 'first_predictions.xlsx')
+        df= pd.DataFrame.from_dict(self.val_results, orient='index')
+        df.to_excel(save_path)
+
+        if self.hparams.rerank:
+            # 保存第二次结果
+            save_path=os.path.join(self.trainer.log_dir, 'second_predictions.xlsx')
+            df= pd.DataFrame.from_dict(self.val_rerank_results, orient='index')
+            df.to_excel(save_path)
 
     def calculate_rerank_metrics(
         self, rerank_predictions, positives, k_values, val_set_name

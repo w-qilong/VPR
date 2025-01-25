@@ -7,7 +7,7 @@
 """
 
 import warnings
-
+import argparse
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning import Trainer
@@ -15,6 +15,8 @@ from pytorch_lightning import Trainer
 from data import DInterface
 from model import AggMInterface
 from arg_parser import parser
+from utils.load_config import load_checkpoint_config
+
 
 # import call callbacks functions and parser for args
 from utils.call_backs import load_callbacks
@@ -60,18 +62,51 @@ def main(args):
         # limit_val_batches=2
     )
 
-    # train and eval model using train_dataloader and eval_dataloader
-    # trainer.fit(model, data_module)
-
-    # validate model using defined test_dataloader, you have to set the ckpt_path
-    trainer.validate(
-        model=model,
-        datamodule=data_module,
-        ckpt_path='logs/dinov2_backbone_dinov2_large/lightning_logs/version_14/checkpoints/dinov2_backbone_epoch(39)_step(39080)_R1[0.9135]_R5[0.9595]_R10[0.9649].ckpt',
-        verbose=True,
-    )
+      # 如果指定了checkpoint，进行测试
+    if hasattr(args, 'ckpt_path'):
+        trainer.validate(
+            model=model,
+            datamodule=data_module,
+            ckpt_path=args.ckpt_path,
+            verbose=True,
+        )
+    else:
+        # 正常训练流程
+        trainer.fit(model, data_module)
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+
+    train = True
+    # 获取checkpoint路径
+    if not train:
+        ckpt_path = 'logs/dinov2_backbone_dinov2_large/lightning_logs/version_26/checkpoints/dinov2_backbone_epoch(16)_step(16609)_R1[88.5100]_R5[94.1900]_R10[95.8100].ckpt'
+    else:
+        ckpt_path=None
+
+    if ckpt_path:
+        # 加载checkpoint对应的配置
+        ckpt_config = load_checkpoint_config(ckpt_path)
+        ckpt_config['ckpt_path'] = ckpt_path  # 设置默认值
+        ckpt_config['eval_datasets'] = [
+        # "mapillary_dataset",
+        # 'spedtest_dataset',
+        # 'tokyo247_dataset',
+        # 'nordland_dataset',
+        # 'pittsburg30k_dataset',
+
+        # 'pittsburg250k_dataset',
+        # 'gardenspoint_dataset',
+        # 'stlucia_dataset',
+        # 'eynsham_dataset',
+        # 'svoxnight_dataset',
+        # 'svoxrain_dataset',
+        # 'amstertime_dataset',
+        # 'essex3in1_dataset',
+    ]
+        ckpt_config['image_size_eval'] = [322, 322]
+        args = argparse.Namespace(**ckpt_config)
+    else:
+        args = parser.parse_args()  
+
     main(args)

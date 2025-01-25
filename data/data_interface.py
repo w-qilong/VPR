@@ -20,7 +20,8 @@ class DInterface(pl.LightningDataModule):
 
         self.num_workers = kwargs["num_workers"]
         # get batch size from kwargs
-        self.batch_size = kwargs["batch_size"]
+        self.train_batch_size = kwargs["train_batch_size"]
+        self.eval_batch_size = kwargs["eval_batch_size"]
         # get train image size from kwargs
         self.image_size_train = kwargs["image_size_train"]
         self.image_size_eval = kwargs["image_size_eval"]
@@ -74,7 +75,7 @@ class DInterface(pl.LightningDataModule):
 
         # define config for train dataloader
         self.train_loader_config = {
-            "batch_size": self.batch_size,
+            "batch_size": self.train_batch_size,
             "num_workers": self.num_workers,
             "drop_last": False,
             "pin_memory": True,
@@ -84,7 +85,7 @@ class DInterface(pl.LightningDataModule):
 
         # define config for valid dataloader
         self.valid_loader_config = {
-            "batch_size": self.batch_size,
+            "batch_size": self.eval_batch_size,
             "num_workers": self.num_workers,
             "drop_last": False,
             "pin_memory": True,
@@ -224,9 +225,9 @@ class DInterface(pl.LightningDataModule):
         table.align["Data"] = "l"
         table.align["Value"] = "l"
         table.header = False
-        table.add_row(["Batch size (PxK)", f"{self.batch_size}x{self.img_per_place}"])
+        table.add_row(["Batch size (PxK)", f"{self.train_batch_size}x{self.img_per_place}"])
         table.add_row(
-            ["# of iterations", f"{self.train_set.__len__() // self.batch_size}"]
+            ["# of iterations", f"{self.train_set.__len__() // self.train_batch_size}"]
         )
         table.add_row(["Image size", f"{self.image_size_train}"])
         print(table.get_string(title="Training config"))

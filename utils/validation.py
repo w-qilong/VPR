@@ -48,7 +48,7 @@ def get_validation_recalls(
                 break
 
     correct_at_k = correct_at_k / len(predictions)
-    d = {k: v for (k, v) in zip(k_values, correct_at_k)}
+    d = {k: np.round(v*100, 2) for (k, v) in zip(k_values, correct_at_k)}
 
     if print_results:
         print()  # print a new line
@@ -206,6 +206,7 @@ def get_rerank_results(
 
     correct_at_k = correct_at_k / len(predictions)
     d = {k: v for (k, v) in zip(k_values, correct_at_k)}
+
 
     if print_results:
         print()  # print a new line

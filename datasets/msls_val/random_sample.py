@@ -19,6 +19,7 @@ def random_sample(root_path, output_path, dbImages, qImages, qIdx, pIdx, num_pai
     sampled_dbImages = [dbImages[i] for i in sampled_pIdx]
 
     # 遍历保存查询和其对应的参考图像
+
     for i in range(num_pairs):
         query_image = os.path.join(root_path, sampled_qImages[i])
         reference_images = [os.path.join(root_path, img) for img in sampled_dbImages[i]]
@@ -44,6 +45,7 @@ if __name__ == "__main__":
     root_path = "/media/cartolab3/DataDisk/wuqilong_file/VPR_datasets/MSLS_Dataset/MSLS"
     output_path = "/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/sample_imgs/msls"
     # 获取当前文件的绝对路径
+    
     current_path = os.path.abspath(__file__)
     # 获取当前文件的父目录
     parent_path = os.path.dirname(current_path)
@@ -53,5 +55,5 @@ if __name__ == "__main__":
     qImages = os.path.join(parent_path, "msls_val_qImages.npy")
     qIdx = os.path.join(parent_path, "msls_val_qIdx.npy")
     pIdx = os.path.join(parent_path, "msls_val_pIdx.npy")
-    num_pairs = 30
+    num_pairs = 100
     random_sample(root_path, output_path, dbImages, qImages, qIdx, pIdx, num_pairs)

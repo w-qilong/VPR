@@ -499,7 +499,8 @@ def find_correspondences(
     saliency_map_layer_and_facet: Dict = {23: 'attn'},
     bin: bool = True,
     include_cls: bool = False,
-    thresh: float = 0.05,
+    saliency_thresh: float = 0.05,
+    best_buddies_thresh: float = 0.65,
     num_pairs: int = 10,
     hierarchy: int = 2,
 ) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
@@ -515,11 +516,11 @@ def find_correspondences(
         saliency_map_layer_and_facet: 要提取显著性图的层索引和特征类型字典
         bin: 是否使用对数分箱，默认为True
         include_cls: 是否包含CLS token，默认为False
-        thresh: 显著性图阈值，默认为0.05
+        saliency_thresh: 显著性图阈值，默认为0.05
         num_pairs: 返回的对应点对数量，默认为10
         hierarchy: 分箱层级数，默认为2
             每个层级使用 3^k 大小的核进行平均池化
-
+        best_buddies_thresh: 最佳匹配点对阈值，默认为0.65
     Returns:
         Tuple[List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
             - points1: 第一张图像中的对应点坐标列表
@@ -552,15 +553,23 @@ def find_correspondences(
         include_cls=include_cls, num_patches=num_patches, hierarchy=hierarchy
     ) # shape: [1, 1, 256, d*h*num_bins]
 
-    print(descriptors1.shape, descriptors2.shape)
+    # print(descriptors1.shape, descriptors2.shape)
 
     # 3. 提取并处理显著性图
     saliency_map1 = extract_saliency_maps(model, saliency_map_layer_and_facet, image_batch1)[0].to(device)
     saliency_map2 = extract_saliency_maps(model, saliency_map_layer_and_facet, image_batch2)[0].to(device)
-    print(saliency_map1.shape, saliency_map2.shape)
+    # print(saliency_map1.shape, saliency_map2.shape)
 
-    fg_mask1 = saliency_map1 > thresh
-    fg_mask2 = saliency_map2 > thresh
+    # print(torch.max(saliency_map1), torch.min(saliency_map1))
+    # print(torch.max(saliency_map2), torch.min(saliency_map2))
+
+    fg_mask1 = saliency_map1 > saliency_thresh
+    fg_mask2 = saliency_map2 > saliency_thresh
+
+    # 统计显著性图中值为True的像素数量
+    fg_mask1_count = torch.sum(fg_mask1).item()
+    fg_mask2_count = torch.sum(fg_mask2).item()
+    print(f"显著性图中值为True的像素数量: {fg_mask1_count}, {fg_mask2_count}")
 
     # 4. 计算描述符之间的相似度
     similarities = chunk_cosine_sim(descriptors1, descriptors2)
@@ -572,7 +581,10 @@ def find_correspondences(
     sim_2, nn_2 = torch.max(similarities, dim=-2)  # 图像1中与图像2最相似的点
     sim_1, nn_1 = sim_1[0, 0], nn_1[0, 0]
     sim_2, nn_2 = sim_2[0, 0], nn_2[0, 0]
-    bbs_mask = nn_2[nn_1] == image_idxs  # 互为最佳匹配的点对
+    # bbs_mask = nn_2[nn_1] == image_idxs  # 互为最佳匹配的点对
+
+    # 添加相似度阈值过滤
+    bbs_mask = (nn_2[nn_1] == image_idxs) & (sim_1 > best_buddies_thresh)  # 互为最佳匹配且相似度大于阈值的点对
 
     print(f"互为最佳匹配的点对数量: {bbs_mask.int().sum().item()}")
 

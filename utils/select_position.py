@@ -46,7 +46,7 @@ def select_position(image, target_size=None):
 # 使用示例
 if __name__ == "__main__":
     # 读取图像
-    img = cv2.imread("sample_imgs/msls/3/query/oYwU28V-MzaKyX9R18zlMQ.jpg")
+    img = cv2.imread("sample_imgs/nordland/4/query/@0@26504.8@@@@@11132@@@@@@@@.jpg")
     
     # 设置目标尺寸
     target_size = (560, 560)

@@ -137,7 +137,7 @@ class Tokyo247Dataset(data.Dataset):
 
 if __name__ == "__main__":
     import numpy as np
-    num_pairs = 10
+    num_pairs = 100
     output_path = "/media/cartolab3/DataDisk/wuqilong_file/Projects/RerenkVPR/sample_imgs/tokyo247/"
 
     strctFile = Tokyo247Dataset(onlyDB=False)
@@ -153,6 +153,7 @@ if __name__ == "__main__":
     sampled_pIdx = [positives[i] for i in random_indices] # list[array]
     db_images=np.array(db_images)
     sampled_dbImages = [db_images[i] for i in sampled_pIdx]
+    
 
      # 遍历保存查询和其对应的参考图像
     for i in range(num_pairs):
