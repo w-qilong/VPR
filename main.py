@@ -11,6 +11,7 @@ import argparse
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning import Trainer
+import numpy as np
 
 from data import DInterface
 from model import AggMInterface
@@ -64,10 +65,11 @@ def main(args):
 
       # 如果指定了checkpoint，进行测试
     if hasattr(args, 'ckpt_path'):
+        model.load_state_dict(torch.load(args.ckpt_path)['state_dict'], strict=False)
         trainer.validate(
             model=model,
             datamodule=data_module,
-            ckpt_path=args.ckpt_path,
+            # ckpt_path=args.ckpt_path,
             verbose=True,
         )
     else:
@@ -77,36 +79,50 @@ def main(args):
 
 if __name__ == "__main__":
 
-    train = True
-    # 获取checkpoint路径
-    if not train:
-        ckpt_path = 'logs/dinov2_backbone_dinov2_large/lightning_logs/version_26/checkpoints/dinov2_backbone_epoch(16)_step(16609)_R1[88.5100]_R5[94.1900]_R10[95.8100].ckpt'
-    else:
-        ckpt_path=None
+    # single train
+    # args = parser.parse_args()
+    # main(args)
 
-    if ckpt_path:
-        # 加载checkpoint对应的配置
+
+    # # 测试不同memory_bank_start_epoch对结果的影响
+    # for i in [True,False]:
+    #     # 获取checkpoint路径
+    #     args = parser.parse_args()  
+    #     args.memory_bank = i
+    #     main(args)
+
+
+    checkpoint_paths=[
+        'logs/dinov2_backbone_dinov2_large/lightning_logs/version_14/checkpoints/dinov2_backbone_epoch(39)_step(39080)_R1[0.9135]_R5[0.9595]_R10[0.9649].ckpt',
+    ]
+
+    # 测试不同checkpoint对结果的影响
+    # 加载checkpoint对应的配置
+    for ckpt_path in checkpoint_paths:
         ckpt_config = load_checkpoint_config(ckpt_path)
         ckpt_config['ckpt_path'] = ckpt_path  # 设置默认值
         ckpt_config['eval_datasets'] = [
         # "mapillary_dataset",
-        # 'spedtest_dataset',
         # 'tokyo247_dataset',
         # 'nordland_dataset',
-        # 'pittsburg30k_dataset',
+        'pittsburg30k_dataset',
+        'spedtest_dataset',
 
+        'stlucia_dataset',
+        'eynsham_dataset',
+        'svoxnight_dataset',
+        'svoxrain_dataset',
+        'amstertime_dataset',
+
+        # 'essex3in1_dataset',
         # 'pittsburg250k_dataset',
         # 'gardenspoint_dataset',
-        # 'stlucia_dataset',
-        # 'eynsham_dataset',
-        # 'svoxnight_dataset',
-        # 'svoxrain_dataset',
-        # 'amstertime_dataset',
-        # 'essex3in1_dataset',
     ]
-        ckpt_config['image_size_eval'] = [322, 322]
-        args = argparse.Namespace(**ckpt_config)
-    else:
-        args = parser.parse_args()  
+        ckpt_config['image_size_eval'] = [560, 560]
+        ckpt_config['rerank'] = True
+        ckpt_config['facet_layer_and_facet'] = {22: "value", 23: "attn"}
 
-    main(args)
+        args = argparse.Namespace(**ckpt_config)
+
+        # 执行main函数
+        main(args)

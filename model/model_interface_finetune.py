@@ -14,6 +14,7 @@ from utils import hook_func
 from PIL import Image
 import os
 import pandas as pd
+import time
 
 
 class AggMInterface(pl.LightningModule):
@@ -95,6 +96,7 @@ class AggMInterface(pl.LightningModule):
                 self.model.num_features,
                 memory_size=self.hparams.memory_bank_size,
                 miner=self.metric_loss_function.miner,
+                decay_lambda=self.hparams.decay_lambda,
             )
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
@@ -310,28 +312,44 @@ class AggMInterface(pl.LightningModule):
             self.val_results[val_set_name] = pitts_dict
 
             if self.hparams.rerank:
-
                 # 第二次排序
-                print(f"\n开始对{val_set_name}数据集进行二次排序...")
-                rerank_predictions = self.rerank_predictions(
-                    val_dataset, num_references, first_predictions
-                )
+                saliency_threshs = np.arange(0.1, 0.9, 0.1).tolist()
+                nn_match_threshs = np.arange(0.1, 0.9, 0.1).tolist()
+                
+                for saliency_thresh in saliency_threshs:
+                    for nn_match_thresh in nn_match_threshs:
 
-                # 计算并记录第二次结果
-                d, rerank_predictions = self.calculate_rerank_metrics(
-                    rerank_predictions, positives, k_values, val_set_name
-                )
+                        print(f"saliency_thresh: {np.round(saliency_thresh, 2)}, nn_match_thresh: {np.round(nn_match_thresh, 2)}")
+                        print(f"\n开始对{val_set_name}数据集进行二次排序...")
 
-                # 记录第二次结果
-                for k in k_values:
-                    self.log(
-                        f"{val_set_name}_rerank/R{k}", d[k], prog_bar=False, logger=True
-                    )
+                        rerank_predictions = self.rerank_predictions(
+                            val_dataset, num_references, first_predictions,
+                            saliency_thresh=saliency_thresh,
+                            nn_match_thresh=nn_match_thresh,
+                        )
 
-                # 保存第二次结果
-                self.val_rerank_results[val_set_name] = d
+                        # 计算并记录第二次结果
+                        d, rerank_predictions = self.calculate_rerank_metrics(
+                            rerank_predictions, positives, k_values, val_set_name
+                        )
 
-                del d, rerank_predictions
+                        # 记录第二次结果
+                        for k in k_values:
+                            self.log(
+                                f"{val_set_name}_{saliency_thresh}_{nn_match_thresh}_rerank/R{k}", d[k], prog_bar=False, logger=True
+                            )
+
+                        # 保存第二次结果
+                        key = f"{val_set_name}_{saliency_thresh}_{nn_match_thresh}"
+                        self.val_rerank_results[key] = d
+
+                        del d, rerank_predictions
+
+                        if self.hparams.rerank:
+                            # 保存第二次结果
+                            save_path=os.path.join(self.trainer.log_dir, 'second_predictions.xlsx')
+                            df= pd.DataFrame.from_dict(self.val_rerank_results, orient='index')
+                            df.to_excel(save_path)
 
             # 清理内存
             del (
@@ -368,7 +386,7 @@ class AggMInterface(pl.LightningModule):
                     break
 
         correct_at_k = correct_at_k / len(rerank_predictions)
-        d = {k: v for (k, v) in zip(k_values, correct_at_k)}
+        d = {k: np.round(v*100, 2) for (k, v) in zip(k_values, correct_at_k)}
 
         print()  # print a new line
         table = PrettyTable()
@@ -378,7 +396,7 @@ class AggMInterface(pl.LightningModule):
 
         return d, rerank_predictions
 
-    def rerank_predictions(self, val_dataset, num_references, first_predictions):
+    def rerank_predictions(self, val_dataset, num_references, first_predictions,saliency_thresh,nn_match_thresh):
         """执行重排序"""
         rerank_predictions = []
 
@@ -402,7 +420,6 @@ class AggMInterface(pl.LightningModule):
                 ref_saliency_map, ref_feats = self.get_features_and_attention(
                     ref_images
                 )
-
                 # 重排序单个查询
                 rerank_predictions.append(
                     validation.single_rerank(
@@ -411,8 +428,8 @@ class AggMInterface(pl.LightningModule):
                         query_saliency_map,
                         ref_saliency_map,
                         candidate_ref_indices,
-                        saliency_thresh=self.hparams.saliency_thresh,
-                        nn_match_thresh=self.hparams.nn_match_thresh,
+                        saliency_thresh=saliency_thresh,
+                        nn_match_thresh=nn_match_thresh,
                     )
                 )
 
@@ -586,3 +603,9 @@ class AggMInterface(pl.LightningModule):
             else:
                 raise ValueError("Invalid lr_scheduler type!")
             return [optimizer], [scheduler]
+        
+    def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
+        # 过滤不需要的键
+        state_dict = checkpoint["state_dict"]
+        self.load_state_dict(state_dict, strict=False)
+        

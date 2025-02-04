@@ -4,7 +4,7 @@ import faiss
 import faiss.contrib.torch_utils
 from prettytable import PrettyTable
 import torch
-
+import time
 # from losses import compute_guided_matching
 from .hook_func import find_correspondences,chunk_cosine_sim,extract_descriptors,log_bin,extract_saliency_maps,extract_features
 
@@ -219,7 +219,7 @@ def get_rerank_results(
 
 if __name__ == "__main__":
     # 创建一组确定的测试数据
-    B, N, D = 2, 4, 8  # 使用小规模数据便于验证
+    B, N, D = 1, 4, 8  # 使用小规模数据便于验证
     
     # 创建特征描述符
     # 在每个批次中设置一些确定的匹配点对
