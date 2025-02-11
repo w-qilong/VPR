@@ -13,8 +13,8 @@ parser.add_argument("--reduced_dim", default=1024, type=int)
 
 # todo:rerank
 parser.add_argument("--rerank", default=False, type=bool)
-parser.add_argument("--saliency_thresh", default=0.05, type=float)
-parser.add_argument("--nn_match_thresh", default=0.65, type=float)
+parser.add_argument("--saliency_thresh", default=0.55, type=float)
+parser.add_argument("--nn_match_thresh", default=0.8, type=float)
 parser.add_argument(
     "--facet_layer_and_facet", default={22: "value", 23: "attn"}, type=dict
 )

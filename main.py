@@ -63,7 +63,7 @@ def main(args):
         # limit_val_batches=2
     )
 
-      # 如果指定了checkpoint，进行测试
+    # 如果指定了checkpoint，进行测试
     if hasattr(args, 'ckpt_path'):
         model.load_state_dict(torch.load(args.ckpt_path)['state_dict'], strict=False)
         trainer.validate(
@@ -102,17 +102,17 @@ if __name__ == "__main__":
         ckpt_config = load_checkpoint_config(ckpt_path)
         ckpt_config['ckpt_path'] = ckpt_path  # 设置默认值
         ckpt_config['eval_datasets'] = [
-        # "mapillary_dataset",
-        # 'tokyo247_dataset',
+        "mapillary_dataset",
+        'tokyo247_dataset',
         # 'nordland_dataset',
-        'pittsburg30k_dataset',
-        'spedtest_dataset',
+        # 'pittsburg30k_dataset',
+        # 'spedtest_dataset',
 
-        'stlucia_dataset',
-        'eynsham_dataset',
-        'svoxnight_dataset',
-        'svoxrain_dataset',
-        'amstertime_dataset',
+        # 'stlucia_dataset',
+        # 'eynsham_dataset',
+        # 'svoxnight_dataset',
+        # 'svoxrain_dataset',
+        # 'amstertime_dataset',
 
         # 'essex3in1_dataset',
         # 'pittsburg250k_dataset',
@@ -120,6 +120,8 @@ if __name__ == "__main__":
     ]
         ckpt_config['image_size_eval'] = [560, 560]
         ckpt_config['rerank'] = True
+        ckpt_config['saliency_thresh'] = 0.55
+        ckpt_config['nn_match_thresh'] = 0.8
         ckpt_config['facet_layer_and_facet'] = {22: "value", 23: "attn"}
 
         args = argparse.Namespace(**ckpt_config)
