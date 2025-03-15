@@ -135,16 +135,6 @@ class AggMInterface(pl.LightningModule):
             transform = self.trainer.datamodule.valid_transform
             self.tmp_imgs = torch.stack([transform(img) for img in self.tmp_imgs])
 
-    def on_train_end(self):
-        # 序列化
-        if self.hparams.save_feats:
-            save_path=os.path.join(self.trainer.log_dir, 'feats_list.pth')
-            torch.save(self.feats_list, save_path)
-
-        if self.hparams.save_neg_num:    
-            save_path=os.path.join(self.trainer.log_dir, 'neg_num_list.pth')
-            torch.save(self.neg_num_list, save_path)
-
     def on_train_epoch_start(self):
         # 我们将跟踪损失层面上无效对/三元组的百分比
         self.triplet_batch_acc = []
@@ -232,6 +222,16 @@ class AggMInterface(pl.LightningModule):
         self.triplet_batch_acc = []
         if self.hparams.memory_bank:
             self.memory_bank.reset_queue()
+
+        # 序列化
+        if self.hparams.save_feats:
+            save_path=os.path.join(self.trainer.log_dir, 'feats_list.pth')
+            torch.save(self.feats_list, save_path)
+
+        if self.hparams.save_neg_num:    
+            save_path=os.path.join(self.trainer.log_dir, 'neg_num_list.pth')
+            torch.save(self.neg_num_list, save_path)
+
 
     def on_validation_epoch_start(self):
         self.val_cls_outputs = [

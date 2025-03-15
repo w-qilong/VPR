@@ -1,0 +1,6 @@
+prune .github
+prune .git
+prune examples
+
+exclude .gitignore
+exclude CHANGES.md

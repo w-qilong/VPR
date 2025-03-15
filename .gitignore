@@ -1,14 +1,14 @@
 pretrained_model/
-datasets/
 logs/
-others/
-imgs/
-__pycache__/
+
 sample_imgs/
-tmp_imgs/
 some_result_images/
-images/
+tmp_imgs/
 tmp_files/
-*.pyc
+
+others/MSLS_Dataset/
+others/AnyLoc/
+
+**/__pycache__/
 
 

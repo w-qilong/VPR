@@ -5,16 +5,12 @@ parser = ArgumentParser()
 # todo: Model Hyperparameters
 parser.add_argument("--model_name", default="dinov2_backbone", type=str)
 parser.add_argument("--backbone_size", default="dinov2_large", type=str)
-parser.add_argument("--lora_r", default=8, type=int)
-parser.add_argument("--lora_alpha", default=16, type=int)
-parser.add_argument("--lora_dropout", default=0.1, type=float)
 parser.add_argument("--finetune_last_n_layers", default=6, type=int)
-parser.add_argument("--reduced_dim", default=1024, type=int)
 
 # todo:rerank
 parser.add_argument("--rerank", default=False, type=bool)
-parser.add_argument("--saliency_thresh", default=0.55, type=float)
-parser.add_argument("--nn_match_thresh", default=0.8, type=float)
+parser.add_argument("--saliency_thresh", default=0.75, type=float)
+parser.add_argument("--nn_match_thresh", default=0.55, type=float)
 parser.add_argument(
     "--facet_layer_and_facet", default={22: "value", 23: "attn"}, type=dict
 )
@@ -144,8 +140,8 @@ parser.add_argument("--miner_margin", default=0.1, type=float)
 parser.add_argument("--memory_bank", default=False, type=bool)
 parser.add_argument("--memory_bank_start_epoch", default=5, type=int)
 parser.add_argument("--memory_bank_size", default=2048, type=int)  # 4*64*4= 1024 4*64*8=2048 4*64*16=4096
-parser.add_argument("--decay_lambda", default=0, type=float)
-parser.add_argument("--save_feats", default=False, type=bool)
+parser.add_argument("--decay_lambda", default=0.05, type=float)
+parser.add_argument("--save_feats", default=True, type=bool)
 parser.add_argument("--save_neg_num", default=False, type=bool)
 
 # whether to use gpu for calculate distance for validation
@@ -159,10 +155,3 @@ parser.add_argument("--gradient_accumulate_factor", default=2, type=int)
 # whether to use early stopping
 parser.add_argument("--use_early_stopping", default=False, type=bool)
 parser.add_argument("--patience", default=5, type=int)
-
-# set if StochasticWeightAveraging need to be used
-parser.add_argument("--StochasticWeightAveraging", default=False, type=bool)
-parser.add_argument("--swa_lrs", default=1e-5, type=float)
-parser.add_argument("--swa_epoch_start", default=0.75, type=float)
-parser.add_argument("--annealing_epochs", default=10, type=int)
-parser.add_argument("--annealing_strategy", default="cos", type=str)

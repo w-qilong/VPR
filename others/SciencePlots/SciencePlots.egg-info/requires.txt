@@ -1,0 +1,8 @@
+matplotlib
+
+[all]
+SciencePlots[test]
+
+[test]
+pytest
+numpy
