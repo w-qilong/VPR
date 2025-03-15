@@ -142,7 +142,6 @@ def register_hooks(
     """
     # 定义支持的特征类型
     supported_facets = {"token", "attn", "key", "query", "value"}
-   
 
     # 遍历模型的每个块
     for block_idx, block in enumerate(model.blocks):
