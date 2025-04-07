@@ -173,8 +173,6 @@ class CrossBatchMemory(BaseLossWrapper, ModuleWithRecords):
         self.embedding_size = embedding_size
         self.memory_size = memory_size
         self.decay_lambda = decay_lambda
-
-        print('CrossBatchMemory init...')
         
         # 初始化内存队列
         self.reset_queue()
@@ -213,11 +211,13 @@ class CrossBatchMemory(BaseLossWrapper, ModuleWithRecords):
         )
         # 标签内存：存储对应的标签
         self.register_buffer("label_memory", torch.zeros(self.memory_size).long())
+
         # 时间戳内存：存储嵌入进入队列的时间步（新增）
         self.register_buffer(
             "timestamp_memory", 
             torch.zeros(self.memory_size).long()
         )
+
         self.has_been_filled = False  # 标记队列是否已填满
         self.queue_idx = 0  # 当前队列指针
 
@@ -242,7 +242,6 @@ class CrossBatchMemory(BaseLossWrapper, ModuleWithRecords):
         # 更新队列指针和时间步
         prev_queue_idx = self.queue_idx
         self.queue_idx = (self.queue_idx + batch_size) % self.memory_size
-        self.current_step += 1  # 全局时间步递增
         
         # 检测队列是否首次填满
         if (not self.has_been_filled) and (self.queue_idx <= prev_queue_idx):
@@ -261,6 +260,8 @@ class CrossBatchMemory(BaseLossWrapper, ModuleWithRecords):
         
         # 计算指数衰减权重：w_j = exp(-λ * Δt)
         weights = torch.exp(-self.decay_lambda * delta_t.float())
+
+        self.current_step += 1  # 全局时间步递增
         
         return weights
 
@@ -307,17 +308,19 @@ class CrossBatchMemory(BaseLossWrapper, ModuleWithRecords):
 
         # 计算时间衰减权重（新增）
         time_weights = self.compute_time_decay_weights(device)
-        
+
         # 对内存嵌入应用时间衰减权重（关键修改）
-        weighted_embedding_memory = self.embedding_memory * time_weights.unsqueeze(1)
+        weighted_embedding_memory = self.embedding_memory
         
         # 获取有效内存范围
         if not self.has_been_filled:
             E_mem = weighted_embedding_memory[: self.queue_idx]
             L_mem = self.label_memory[: self.queue_idx]
+            time_weights = time_weights[: self.queue_idx]
         else:
             E_mem = weighted_embedding_memory
             L_mem = self.label_memory
+            time_weights = time_weights
 
         # 生成索引元组（保持原始逻辑）
         indices_tuple = self.create_indices_tuple(
@@ -330,7 +333,11 @@ class CrossBatchMemory(BaseLossWrapper, ModuleWithRecords):
         )
         
         # 计算损失（使用加权后的内存嵌入）
-        loss = self.loss(embeddings, labels, indices_tuple, E_mem, L_mem)
+        if self.loss.__class__.__name__ == 'MultiSimilarityLoss':
+            self.loss.weight = time_weights
+            loss = self.loss(embeddings, labels, indices_tuple, E_mem, L_mem)
+        else:
+            loss = self.loss(embeddings, labels, indices_tuple, E_mem, L_mem)
         return loss, indices_tuple
 
     def create_indices_tuple(self, embeddings, labels, E_mem, L_mem, 

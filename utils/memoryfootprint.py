@@ -40,8 +40,8 @@ def calculate_memory_usage(descriptors):
 # 示例用法
 if __name__ == "__main__":
     # 创建示例描述符
-    global_desc = np.random.rand(529).astype(np.float32)  # 128维全局描述符
-    local_descs = [np.random.rand(128).astype(np.float32) for _ in range(3721)]  # 100个128维局部描述符
+    global_desc = np.random.rand(1024).astype(np.float32)  # 128维全局描述符
+    local_descs = [np.random.rand(1024).astype(np.float32) for _ in range(390)]  # 100个128维局部描述符
     
     descriptors = {
         'global': global_desc,

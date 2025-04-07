@@ -90,7 +90,7 @@ class AggMInterface(pl.LightningModule):
             )
 
         # define memory bank
-        if self.hparams.memory_bank:
+        if self.hparams.use_memory_bank:
             self.memory_bank = CrossBatchMemory(
                 self.metric_loss_function.loss_fn,
                 self.model.num_features,
@@ -155,7 +155,7 @@ class AggMInterface(pl.LightningModule):
         cls_token = self.forward(images)
 
         if (
-            self.hparams.memory_bank
+            self.hparams.use_memory_bank
             and self.trainer.current_epoch >= self.hparams.memory_bank_start_epoch
         ):
             # 使用memory bank
@@ -220,17 +220,18 @@ class AggMInterface(pl.LightningModule):
     def on_train_epoch_end(self):
         # we empty the batch_acc list for next epoch
         self.triplet_batch_acc = []
-        if self.hparams.memory_bank:
+        if self.hparams.use_memory_bank:
             self.memory_bank.reset_queue()
 
         # 序列化
-        if self.hparams.save_feats:
-            save_path=os.path.join(self.trainer.log_dir, 'feats_list.pth')
-            torch.save(self.feats_list, save_path)
+        if self.trainer.log_dir:
+            if self.hparams.save_feats:
+                save_path=os.path.join(self.trainer.log_dir, 'feats_list.pth')
+                torch.save(self.feats_list, save_path)
 
-        if self.hparams.save_neg_num:    
-            save_path=os.path.join(self.trainer.log_dir, 'neg_num_list.pth')
-            torch.save(self.neg_num_list, save_path)
+            if self.hparams.use_memory_bank and self.hparams.save_neg_num:    
+                save_path=os.path.join(self.trainer.log_dir, 'neg_num_list.pth')
+                torch.save(self.neg_num_list, save_path)
 
 
     def on_validation_epoch_start(self):
@@ -313,8 +314,10 @@ class AggMInterface(pl.LightningModule):
 
             if self.hparams.rerank:
                 # 第二次排序
-                saliency_threshs = np.arange(0.1, 0.9, 0.1).tolist()
-                nn_match_threshs = np.arange(0.1, 0.9, 0.1).tolist()
+                # saliency_threshs = np.arange(0.1, 0.9, 0.1).tolist()
+                # nn_match_threshs = np.arange(0.1, 0.9, 0.1).tolist()
+                saliency_threshs = self.hparams.saliency_thresh
+                nn_match_threshs = self.hparams.nn_match_thresh
                 
                 for saliency_thresh in saliency_threshs:
                     for nn_match_thresh in nn_match_threshs:
@@ -363,15 +366,16 @@ class AggMInterface(pl.LightningModule):
             print("\n")
 
         # 保存第一次结果
-        save_path=os.path.join(self.trainer.log_dir, 'first_predictions.xlsx')
-        df= pd.DataFrame.from_dict(self.val_results, orient='index')
-        df.to_excel(save_path)
-
-        if self.hparams.rerank:
-            # 保存第二次结果
-            save_path=os.path.join(self.trainer.log_dir, 'second_predictions.xlsx')
-            df= pd.DataFrame.from_dict(self.val_rerank_results, orient='index')
+        if self.trainer.log_dir:
+            save_path=os.path.join(self.trainer.log_dir, 'first_predictions.xlsx')
+            df= pd.DataFrame.from_dict(self.val_results, orient='index')
             df.to_excel(save_path)
+
+            if self.hparams.rerank:
+                # 保存第二次结果
+                save_path=os.path.join(self.trainer.log_dir, 'second_predictions.xlsx')
+                df= pd.DataFrame.from_dict(self.val_rerank_results, orient='index')
+                df.to_excel(save_path)
 
     def calculate_rerank_metrics(
         self, rerank_predictions, positives, k_values, val_set_name

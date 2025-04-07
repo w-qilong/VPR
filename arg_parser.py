@@ -5,15 +5,13 @@ parser = ArgumentParser()
 # todo: Model Hyperparameters
 parser.add_argument("--model_name", default="dinov2_backbone", type=str)
 parser.add_argument("--backbone_size", default="dinov2_large", type=str)
-parser.add_argument("--finetune_last_n_layers", default=6, type=int)
+parser.add_argument("--finetune_last_n_layers", default=4, type=int)
 
 # todo:rerank
 parser.add_argument("--rerank", default=False, type=bool)
-parser.add_argument("--saliency_thresh", default=0.75, type=float)
-parser.add_argument("--nn_match_thresh", default=0.55, type=float)
-parser.add_argument(
-    "--facet_layer_and_facet", default={22: "value", 23: "attn"}, type=dict
-)
+parser.add_argument("--saliency_thresh", default=0.3, type=float)
+parser.add_argument("--nn_match_thresh", default=0.65, type=float)
+parser.add_argument("--facet_layer_and_facet", default={22: "value", 23: "attn"}, type=dict)
 parser.add_argument("--include_cls", default=False, type=bool)
 parser.add_argument("--bin", default=False, type=bool)
 parser.add_argument("--hierarchy", default=2, type=int)
@@ -63,7 +61,7 @@ parser.add_argument("--accelerator", default="gpu", type=str)
 # select GPU device
 parser.add_argument("--devices", default=[0], type=list)
 # set training epochs
-parser.add_argument("--epochs", default=30, type=int)
+parser.add_argument("--epochs", default=20, type=int)
 # set batch size
 parser.add_argument("--train_batch_size", default=64, type=int)
 parser.add_argument("--eval_batch_size", default=64, type=int)
@@ -137,12 +135,13 @@ parser.add_argument(
 parser.add_argument("--miner_margin", default=0.1, type=float)
 
 # whether to use memory bank
-parser.add_argument("--memory_bank", default=False, type=bool)
+parser.add_argument("--use_memory_bank", default=True, type=bool)
+parser.add_argument("--use_weight_decay", default=False, type=bool)
 parser.add_argument("--memory_bank_start_epoch", default=5, type=int)
-parser.add_argument("--memory_bank_size", default=2048, type=int)  # 4*64*4= 1024 4*64*8=2048 4*64*16=4096
+parser.add_argument("--memory_bank_size", default=16384, type=int)  # 4*64*4= 1024 4*64*8=2048 4*64*16=4096
 parser.add_argument("--decay_lambda", default=0.05, type=float)
 parser.add_argument("--save_feats", default=True, type=bool)
-parser.add_argument("--save_neg_num", default=False, type=bool)
+parser.add_argument("--save_neg_num", default=True, type=bool)
 
 # whether to use gpu for calculate distance for validation
 parser.add_argument("--faiss_gpu", default=False, type=bool)

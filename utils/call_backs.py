@@ -73,14 +73,14 @@ def load_callbacks(args):
         callbacks.append(plc.GradientAccumulationScheduler({args.gradient_accumulate_start_epoch:
                                                                 args.gradient_accumulate_factor}))
 
-    # Implements the Stochastic Weight Averaging (SWA) Callback to average a model.
-    if args.StochasticWeightAveraging:
-        callbacks.append(plc.StochasticWeightAveraging(
-            swa_lrs=args.swa_lrs,
-            swa_epoch_start=args.swa_epoch_start,
-            annealing_epochs=args.annealing_epochs,
-            annealing_strategy=args.annealing_strategy,
-        ))
+    # # Implements the Stochastic Weight Averaging (SWA) Callback to average a model.
+    # if args.StochasticWeightAveraging:
+    #     callbacks.append(plc.StochasticWeightAveraging(
+    #         swa_lrs=args.swa_lrs,
+    #         swa_epoch_start=args.swa_epoch_start,
+    #         annealing_epochs=args.annealing_epochs,
+    #         annealing_strategy=args.annealing_strategy,
+    #     ))
 
     # init progress bar for validation
     callbacks.append(

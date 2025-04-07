@@ -26,6 +26,7 @@ class BaseMetricLossFunction(
                             Can also be left as None
         Returns: the loss
         """
+
         self.reset_stats()
         c_f.check_shapes(embeddings, labels)
         if labels is not None:

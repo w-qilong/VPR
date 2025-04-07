@@ -84,16 +84,30 @@ if __name__ == "__main__":
     # main(args)
 
 
-    # # 测试不同memory_bank_start_epoch对结果的影响
-    # for i in [True,False]:
-    #     # 获取checkpoint路径
-    #     args = parser.parse_args()  
-    #     args.memory_bank = i
+    # 第三种方式：修改多个参数的字典方式
+    # configs = [
+    #     {"decay_lambda": 0.01, "use_weight_decay": True},
+    #     {"decay_lambda": 0.05, "use_weight_decay": True},
+    #     {"decay_lambda": 0.1, "use_weight_decay": True},
+    #     {"decay_lambda": 0.2, "use_weight_decay": True},
+    #     {"decay_lambda": 0.5, "use_weight_decay": True},
+    # ]
+    # for config in configs:
+    #     args = parser.parse_args()
+    #     for key, value in config.items():
+    #         setattr(args, key, value)
     #     main(args)
 
 
     checkpoint_paths=[
-        'logs/dinov2_backbone_dinov2_large/lightning_logs/version_14/checkpoints/dinov2_backbone_epoch(39)_step(39080)_R1[0.9135]_R5[0.9595]_R10[0.9649].ckpt',
+        # 不适用MQ
+        # 'logs/dinov2_backbone_dinov2_large/lightning_logs/version_0/checkpoints/dinov2_backbone_epoch(16)_step(16609)_R1[88.6500]_R5[94.3200]_R10[95.8100].ckpt',
+        # 使用MQ
+        'logs/dinov2_backbone_dinov2_large/lightning_logs/version_12/checkpoints/dinov2_backbone_epoch(19)_step(19540)_R1[91.0800]_R5[96.4900]_R10[96.8900].ckpt'
+    ]
+
+    param_list=[
+        {20: "value", 23: "attn"},
     ]
 
     # 测试不同checkpoint对结果的影响
@@ -102,29 +116,33 @@ if __name__ == "__main__":
         ckpt_config = load_checkpoint_config(ckpt_path)
         ckpt_config['ckpt_path'] = ckpt_path  # 设置默认值
         ckpt_config['eval_datasets'] = [
-        "mapillary_dataset",
-        'tokyo247_dataset',
+        # "mapillary_dataset",
+        # 'tokyo247_dataset',
         # 'nordland_dataset',
         # 'pittsburg30k_dataset',
-        # 'spedtest_dataset',
-
-        # 'stlucia_dataset',
-        # 'eynsham_dataset',
+        'spedtest_dataset',
+       
         # 'svoxnight_dataset',
         # 'svoxrain_dataset',
         # 'amstertime_dataset',
+         # 'eynsham_dataset',
 
+        # 'stlucia_dataset',
         # 'essex3in1_dataset',
         # 'pittsburg250k_dataset',
         # 'gardenspoint_dataset',
     ]
-        ckpt_config['image_size_eval'] = [560, 560]
+        ckpt_config['recall_top_k'] = [1, 5, 10]
+        ckpt_config['image_size_eval'] = [322, 322]
         ckpt_config['rerank'] = True
-        ckpt_config['saliency_thresh'] = 0.55
-        ckpt_config['nn_match_thresh'] = 0.8
-        ckpt_config['facet_layer_and_facet'] = {22: "value", 23: "attn"}
+        ckpt_config['saliency_thresh'] = [0.3]
+        ckpt_config['nn_match_thresh'] = [0.6]
 
+        # ckpt_config['saliency_thresh'] = np.arange(0,1.1,0.1).round(1).tolist()
+        # ckpt_config['nn_match_thresh'] = np.arange(0,1.1,0.1).round(1).tolist()
+
+        
+        ckpt_config['facet_layer_and_facet'] = {20: "value", 23: "attn"}
         args = argparse.Namespace(**ckpt_config)
-
         # 执行main函数
         main(args)

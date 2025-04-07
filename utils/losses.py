@@ -6,56 +6,49 @@ from torch.autograd import Variable
 from torch.nn import CosineEmbeddingLoss
 
 
-def get_loss(loss_name):
-    if loss_name == 'SupConLoss': return losses.SupConLoss(temperature=0.07)
-    if loss_name == 'CircleLoss': return losses.CircleLoss(m=0.4, gamma=80)  # these are params for image retrieval
-    if loss_name == 'MultiSimilarityLoss': return losses.MultiSimilarityLoss(alpha=1.0, beta=50, base=0.0,
-                                                                             distance=CosineSimilarity())
-    if loss_name == 'ContrastiveLoss': return losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
-    if loss_name == 'Lifted': return losses.GeneralizedLiftedStructureLoss(neg_margin=0, pos_margin=1,
-                                                                           distance=DotProductSimilarity())
-    if loss_name == 'FastAPLoss': return losses.FastAPLoss(num_bins=30)
-
-    if loss_name == 'NTXentLoss': return losses.NTXentLoss(
-        temperature=0.07)  # The MoCo paper uses 0.07, while SimCLR uses 0.5.
-    if loss_name == 'TripletMarginLoss':
-        return losses.TripletMarginLoss(margin=0.1, swap=False, smooth_loss=False,
-                                        triplets_per_anchor='all')  # or an int, for example 100
-        # return nn.TripletMarginLoss(margin=0.1, p=2, reduction='mean')
-
-    if loss_name == 'CentroidTripletLoss': return losses.CentroidTripletLoss(margin=0.05,
-                                                                             swap=False,
-                                                                             smooth_loss=False,
-                                                                             triplets_per_anchor="all")
+def get_loss(loss_name, use_weight_decay=False):
+    losses_dict = {
+        'SupConLoss': lambda: losses.SupConLoss(temperature=0.07),
+        'CircleLoss': lambda: losses.CircleLoss(m=0.4, gamma=80),
+        'MultiSimilarityLoss': lambda: losses.MultiSimilarityLoss(alpha=2.0, beta=50.0, base=1, 
+                                                                distance=CosineSimilarity(), use_weight_decay=use_weight_decay),
+        'ContrastiveLoss': lambda: losses.ContrastiveLoss(pos_margin=0, neg_margin=1),
+        'Lifted': lambda: losses.GeneralizedLiftedStructureLoss(neg_margin=0, pos_margin=1,
+                                                              distance=DotProductSimilarity()),
+        'FastAPLoss': lambda: losses.FastAPLoss(num_bins=30),
+        'NTXentLoss': lambda: losses.NTXentLoss(temperature=0.07),
+        'TripletMarginLoss': lambda: losses.TripletMarginLoss(margin=0.1, swap=False, 
+                                                            smooth_loss=False, triplets_per_anchor='all'),
+        'CentroidTripletLoss': lambda: losses.CentroidTripletLoss(margin=0.05, swap=False,
+                                                                smooth_loss=False, triplets_per_anchor="all"),
+        'CrossEntropy': lambda: nn.CrossEntropyLoss(reduction='mean'),
+        'BCEWithLogitsLoss': lambda: nn.BCEWithLogitsLoss(),
+        'FocalLoss': lambda: FocalLoss(gamma=2, alpha=0.5, size_average=True),
+        'CosineEmbeddingLoss': lambda: CosineEmbeddingLoss(),
+    }
     
-    if loss_name == 'CrossEntropy': return nn.CrossEntropyLoss(reduction='mean')
-
-    if loss_name == 'BCEWithLogitsLoss': return nn.BCEWithLogitsLoss()
-
-    if loss_name == 'FocalLoss': return FocalLoss(gamma=2, alpha=0.5, size_average=True)
-
-    if loss_name == 'CosineEmbeddingLoss': return CosineEmbeddingLoss()
-
+    if loss_name in losses_dict:
+        return losses_dict[loss_name]()
+    
     raise NotImplementedError(f'Sorry, <{loss_name}> loss function is not implemented!')
 
 
 def get_miner(miner_name, margin=0.1):
-    # Triplet miners output a tuple of size 3: (anchors, positives, negatives).
-    if miner_name == 'TripletMarginMiner': return miners.TripletMarginMiner(margin=margin,
-                                                                            distance=CosineSimilarity(),
-                                                                            type_of_triplets="hard")  # all, hard, semihard, easy
-    # MultiSimilarityMiner outputs two tuples: (anchor, positive), (anchor negative)
-    if miner_name == 'MultiSimilarityMiner': return miners.MultiSimilarityMiner(epsilon=margin,
-                                                                                distance=CosineSimilarity())
-
-    if miner_name == 'PairMarginMiner': return miners.PairMarginMiner(pos_margin=0.7, neg_margin=0.3,
-                                                                      distance=DotProductSimilarity())
-    if miner_name == 'BatchHardMiner': return miners.BatchHardMiner(distance=CosineSimilarity())
-
-    if miner_name == 'BatchEasyHardMiner':
-        return miners.BatchEasyHardMiner(
-            distance=CosineSimilarity(),
-        )
+    miners_dict = {
+        'TripletMarginMiner': lambda: miners.TripletMarginMiner(margin=margin,
+                                                              distance=CosineSimilarity(),
+                                                              type_of_triplets="hard"),
+        'MultiSimilarityMiner': lambda: miners.MultiSimilarityMiner(epsilon=margin,
+                                                                  distance=CosineSimilarity()),
+        'PairMarginMiner': lambda: miners.PairMarginMiner(pos_margin=0.7, neg_margin=0.3,
+                                                        distance=DotProductSimilarity()),
+        'BatchHardMiner': lambda: miners.BatchHardMiner(distance=CosineSimilarity()),
+        'BatchEasyHardMiner': lambda: miners.BatchEasyHardMiner(distance=CosineSimilarity()),
+    }
+    
+    if miner_name in miners_dict:
+        return miners_dict[miner_name]()
+    
     return None
 
 
@@ -102,33 +95,36 @@ class FocalLoss(nn.Module):
         super(FocalLoss, self).__init__()
         self.gamma = gamma
         self.alpha = alpha
-        if isinstance(alpha, (float, int)): self.alpha = torch.Tensor([alpha, 1 - alpha])
-        if isinstance(alpha, list): self.alpha = torch.Tensor(alpha)
+        if isinstance(alpha, (float, int)):
+            self.alpha = torch.Tensor([alpha, 1 - alpha])
+        elif isinstance(alpha, list):
+            self.alpha = torch.Tensor(alpha)
         self.size_average = size_average
 
     def forward(self, input, target):
+        # 重塑输入张量以适应计算
         if input.dim() > 2:
             input = input.view(input.size(0), input.size(1), -1)  # N,C,H,W => N,C,H*W
             input = input.transpose(1, 2)  # N,C,H*W => N,H*W,C
             input = input.contiguous().view(-1, input.size(2))  # N,H*W,C => N*H*W,C
         target = target.view(-1, 1)
 
-        logpt = F.log_softmax(input)
+        logpt = F.log_softmax(input, dim=1)
         logpt = logpt.gather(1, target)
         logpt = logpt.view(-1)
         pt = Variable(logpt.data.exp())
 
+        # 应用 alpha 权重
         if self.alpha is not None:
             if self.alpha.type() != input.data.type():
                 self.alpha = self.alpha.type_as(input.data)
             at = self.alpha.gather(0, target.data.view(-1))
             logpt = logpt * Variable(at)
 
+        # 计算 focal loss
         loss = -1 * (1 - pt) ** self.gamma * logpt
-        if self.size_average:
-            return loss.mean()
-        else:
-            return loss.sum()
+        
+        return loss.mean() if self.size_average else loss.sum()
 
 
 import math
