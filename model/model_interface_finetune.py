@@ -15,6 +15,8 @@ from PIL import Image
 import os
 import pandas as pd
 import time
+import matplotlib.pyplot as plt
+from torchvision.transforms.functional import to_pil_image
 
 
 class AggMInterface(pl.LightningModule):
@@ -319,6 +321,8 @@ class AggMInterface(pl.LightningModule):
                 saliency_threshs = self.hparams.saliency_thresh
                 nn_match_threshs = self.hparams.nn_match_thresh
                 
+                improved_examples = []  # 用于存储重排序后改进的例子
+                
                 for saliency_thresh in saliency_threshs:
                     for nn_match_thresh in nn_match_threshs:
 
@@ -334,6 +338,32 @@ class AggMInterface(pl.LightningModule):
                         # 计算并记录第二次结果
                         d, rerank_predictions = self.calculate_rerank_metrics(
                             rerank_predictions, positives, k_values, val_set_name
+                        )
+                        
+                        # 查找重排序后结果改进的查询
+                        improved_examples = self.find_improved_examples(
+                            val_dataset, 
+                            num_references, 
+                            first_predictions, 
+                            rerank_predictions, 
+                            positives,
+                            top_k=3  # 获取前3个结果
+                        )
+                        
+                        # 保存改进的例子
+                        if self.trainer.log_dir and len(improved_examples) > 0:
+                            example_save_path = os.path.join(
+                                self.trainer.log_dir, 
+                                f'improved_examples_{val_set_name}_{saliency_thresh}_{nn_match_thresh}.pth'
+                            )
+                            torch.save(improved_examples, example_save_path)
+                            
+                            # 可视化部分改进的例子（选择前100个）
+                            self.visualize_improved_examples(
+                                val_dataset,
+                                num_references,
+                                improved_examples[:100] if len(improved_examples) > 100 else improved_examples,
+                                os.path.join(self.trainer.log_dir, f'improved_examples_{val_set_name}_{saliency_thresh}_{nn_match_thresh}')
                         )
 
                         # 记录第二次结果
@@ -608,8 +638,220 @@ class AggMInterface(pl.LightningModule):
                 raise ValueError("Invalid lr_scheduler type!")
             return [optimizer], [scheduler]
         
-    def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
-        # 过滤不需要的键
-        state_dict = checkpoint["state_dict"]
-        self.load_state_dict(state_dict, strict=False)
         
+    def find_improved_examples(self, val_dataset, num_references, first_predictions, rerank_predictions, positives, top_k=3):
+        """
+        查找重排序后结果改进的查询样例，并保存图像路径
+        
+        Args:
+            val_dataset: 验证数据集
+            num_references: 参考图像数量
+            first_predictions: 初始排序结果
+            rerank_predictions: 重排序结果
+            positives: 正样本索引
+            top_k: 返回前k个参考图像
+            
+        Returns:
+            improved_examples: 包含重排序改进的查询样例列表
+        """
+        improved_examples = []
+        
+        for q_idx, (first_pred, rerank_pred) in enumerate(zip(first_predictions, rerank_predictions)):
+            # 统计重排序前和重排序后前top_k中正确结果的数量
+            first_correct_count = np.sum(np.in1d(first_pred[:top_k], positives[q_idx]))
+            rerank_correct_count = np.sum(np.in1d(rerank_pred[:top_k], positives[q_idx]))
+            
+            # 如果重排序后正确结果数量增加，则视为改进
+            if rerank_correct_count > first_correct_count:
+                # 获取图像路径而非索引
+                query_idx = q_idx + num_references
+                query_path = val_dataset.get_image_path(query_idx) if hasattr(val_dataset, 'get_image_path') else str(query_idx)
+                
+                # 获取原始预测的图像路径
+                first_pred_paths = []
+                for idx in first_pred[:top_k]:
+                    path = val_dataset.get_image_path(idx) if hasattr(val_dataset, 'get_image_path') else str(idx)
+                    first_pred_paths.append(path)
+                
+                # 获取重排序后预测的图像路径
+                rerank_pred_paths = []
+                for idx in rerank_pred[:top_k]:
+                    path = val_dataset.get_image_path(idx) if hasattr(val_dataset, 'get_image_path') else str(idx)
+                    rerank_pred_paths.append(path)
+                
+                # 获取正样本路径
+                positive_paths = []
+                for idx in positives[q_idx]:
+                    if isinstance(idx, (int, np.integer)):
+                        path = val_dataset.get_image_path(idx) if hasattr(val_dataset, 'get_image_path') else str(idx)
+                        positive_paths.append(path)
+                
+                # 记录查询索引和排序结果（同时保存索引和路径）
+                example = {
+                    'query_idx': query_idx,
+                    'query_path': query_path,
+                    'first_predictions': first_pred[:top_k].tolist(),
+                    'first_pred_paths': first_pred_paths,
+                    'rerank_predictions': rerank_pred[:top_k].tolist(),
+                    'rerank_pred_paths': rerank_pred_paths,
+                    'positives': positives[q_idx].tolist() if isinstance(positives[q_idx], np.ndarray) else positives[q_idx],
+                    'positive_paths': positive_paths,
+                    'first_correct_count': int(first_correct_count),
+                    'rerank_correct_count': int(rerank_correct_count),
+                }
+                improved_examples.append(example)
+        
+        print(f"找到 {len(improved_examples)} 个重排序后改进的查询样例")
+        return improved_examples
+    
+    def visualize_improved_examples(self, val_dataset, num_references, improved_examples, save_dir):
+        """
+        Visualize the comparison of results before and after reranking
+        
+        Args:
+            val_dataset: Validation dataset
+            num_references: Number of reference images
+            improved_examples: List of improved examples
+            save_dir: Directory to save the visualization results
+        """
+        os.makedirs(save_dir, exist_ok=True)
+        
+        # Define denormalization transform
+        mean = torch.tensor(self.trainer.datamodule.mean_std["mean"]).view(3, 1, 1)
+        std = torch.tensor(self.trainer.datamodule.mean_std["std"]).view(3, 1, 1)
+        
+        def denormalize(tensor):
+            """Denormalization function"""
+            tensor = tensor.clone()
+            tensor.mul_(std).add_(mean)  # Reverse normalization
+            tensor = torch.clamp(tensor, 0, 1)  # Clamp to [0,1] range
+            return tensor
+        
+        # 同时保存改进示例的更多信息
+        examples_info_file = os.path.join(save_dir, 'examples_info.txt')
+        with open(examples_info_file, 'w') as f:
+            f.write("Improved Examples Information\n")
+            f.write("============================\n\n")
+        
+        for idx, example in enumerate(improved_examples):
+            query_idx = example['query_idx']
+            first_preds = example['first_predictions']
+            rerank_preds = example['rerank_predictions']
+            positives = example['positives']
+            first_correct = example.get('first_correct_count', 0)
+            rerank_correct = example.get('rerank_correct_count', 0)
+            
+            # 将路径信息写入文件
+            with open(examples_info_file, 'a') as f:
+                f.write(f"Example #{idx+1}\n")
+                f.write(f"Query: {example.get('query_path', str(query_idx))}\n")
+                f.write("Original predictions:\n")
+                for i, path in enumerate(example.get('first_pred_paths', [])):
+                    f.write(f"  Top {i+1}: {path} {'(correct)' if first_preds[i] in positives else ''}\n")
+                f.write("Reranked predictions:\n")
+                for i, path in enumerate(example.get('rerank_pred_paths', [])):
+                    f.write(f"  Top {i+1}: {path} {'(correct)' if rerank_preds[i] in positives else ''}\n")
+                f.write(f"Improvement: {first_correct} -> {rerank_correct} correct matches\n\n")
+            
+            # Create a figure with 1 row and 7 columns (1 query + 3 original + 3 reranked)
+            fig, axs = plt.subplots(1, 7, figsize=(21, 5), dpi=150)
+            fig.patch.set_facecolor('white')  # 设置白色背景，使边框更明显
+            
+            # 定义更鲜明的颜色
+            correct_color = '#00CC00'  # 亮绿色
+            incorrect_color = '#FF0000'  # 亮红色
+            
+            # Get and process query image
+            query_img = val_dataset[query_idx][0]  # Get tensor
+            if isinstance(query_img, torch.Tensor):
+                query_img = denormalize(query_img)  # Denormalize
+                query_img = to_pil_image(query_img)  # Convert to PIL image
+            
+            # Plot query image
+            axs[0].imshow(query_img)
+            # 给查询图像添加黑色边框
+            for spine in axs[0].spines.values():
+                spine.set_visible(True)
+                spine.set_color('black')
+                spine.set_linewidth(5)
+            axs[0].axis('off')
+            
+            # Plot original top-3 predictions
+            for i, pred_idx in enumerate(first_preds):
+                pred_img = val_dataset[pred_idx][0]  # Get tensor
+                if isinstance(pred_img, torch.Tensor):
+                    pred_img = denormalize(pred_img)  # Denormalize
+                    pred_img = to_pil_image(pred_img)  # Convert to PIL image
+                
+                # Plot the image
+                axs[i+1].imshow(pred_img)
+                is_positive = pred_idx in positives
+                
+                # 使边框更明显
+                for spine in axs[i+1].spines.values():
+                    spine.set_visible(True)
+                    if is_positive:
+                        # 绿色边框
+                        spine.set_color(correct_color)
+                        spine.set_linewidth(6)  # 更粗的边框
+                    else:
+                        # 红色边框
+                        spine.set_color(incorrect_color)
+                        spine.set_linewidth(6)  # 更粗的边框
+                
+                # 添加矩形边框增强视觉效果
+                if is_positive:
+                    rect = plt.Rectangle((0, 0), 1, 1, fill=False, 
+                                        edgecolor=correct_color, linewidth=6,
+                                        transform=axs[i+1].transAxes, clip_on=False)
+                    axs[i+1].add_patch(rect)
+                else:
+                    rect = plt.Rectangle((0, 0), 1, 1, fill=False, 
+                                        edgecolor=incorrect_color, linewidth=6,
+                                        transform=axs[i+1].transAxes, clip_on=False)
+                    axs[i+1].add_patch(rect)
+                
+                axs[i+1].axis('off')
+            
+            # Plot reranked top-3 predictions
+            for i, pred_idx in enumerate(rerank_preds):
+                pred_img = val_dataset[pred_idx][0]  # Get tensor
+                if isinstance(pred_img, torch.Tensor):
+                    pred_img = denormalize(pred_img)  # Denormalize
+                    pred_img = to_pil_image(pred_img)  # Convert to PIL image
+                
+                # Plot the image
+                axs[i+4].imshow(pred_img)
+                is_positive = pred_idx in positives
+                
+                # 使边框更明显
+                for spine in axs[i+4].spines.values():
+                    spine.set_visible(True)
+                    if is_positive:
+                        # 绿色边框
+                        spine.set_color(correct_color)
+                        spine.set_linewidth(6)  # 更粗的边框
+                    else:
+                        # 红色边框
+                        spine.set_color(incorrect_color)
+                        spine.set_linewidth(6)  # 更粗的边框
+                
+                # 添加矩形边框增强视觉效果
+                if is_positive:
+                    rect = plt.Rectangle((0, 0), 1, 1, fill=False, 
+                                        edgecolor=correct_color, linewidth=6,
+                                        transform=axs[i+4].transAxes, clip_on=False)
+                    axs[i+4].add_patch(rect)
+                else:
+                    rect = plt.Rectangle((0, 0), 1, 1, fill=False, 
+                                        edgecolor=incorrect_color, linewidth=6,
+                                        transform=axs[i+4].transAxes, clip_on=False)
+                    axs[i+4].add_patch(rect)
+                
+                axs[i+4].axis('off')
+            
+            plt.tight_layout()
+            # 减小图像间距但保留足够空间显示边框
+            plt.subplots_adjust(wspace=0.08)
+            plt.savefig(os.path.join(save_dir, f'example_{idx}.png'), bbox_inches='tight', facecolor='white', dpi=600)
+            plt.close()        
