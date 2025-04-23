@@ -9,8 +9,8 @@ import time
 from .hook_func import find_correspondences,chunk_cosine_sim,extract_descriptors,log_bin,extract_saliency_maps,extract_features
 
 # 用于记录每个batch的mask数量
-global mean_mask_count
-mean_mask_count=[0]
+# global mean_mask_count
+# mean_mask_count=[0]
 
 def get_validation_recalls(
     r_list,
@@ -98,11 +98,11 @@ def get_correspondences(
     # 2. 提取并处理显著性图，生成前景掩码
     query_fg_mask = query_attn_maps > saliency_thresh  # shape: [N], bool tensor
     ref_fg_mask = ref_attn_maps > saliency_thresh     # shape: [N], bool tensor
-    global mean_mask_count
-    mean_mask_count.append(query_fg_mask.cpu().numpy().sum())
-    # 计算平均mask数量
-    mean_count=np.array(mean_mask_count).mean()
-    print(f"mean_count: {mean_count}")    
+    # global mean_mask_count
+    # mean_mask_count.append(query_fg_mask.cpu().numpy().sum())
+    # # 计算平均mask数量
+    # mean_count=np.array(mean_mask_count).mean()
+    # print(f"mean_count: {mean_count}")    
 
     # 3. 计算特征描述符间的余弦相似度
     query_desc=query_desc.float()

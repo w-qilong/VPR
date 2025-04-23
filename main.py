@@ -118,9 +118,9 @@ if __name__ == "__main__":
         ckpt_config['eval_datasets'] = [
         # "mapillary_dataset",
         # 'tokyo247_dataset',
-        # 'nordland_dataset',
+        'nordland_dataset',
         # 'pittsburg30k_dataset',
-        'spedtest_dataset',
+        # 'spedtest_dataset',
        
         # 'svoxnight_dataset',
         # 'svoxrain_dataset',
