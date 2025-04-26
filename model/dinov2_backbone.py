@@ -101,7 +101,7 @@ if __name__ == "__main__":
     from torchvision import transforms
     import torch
 
-    model = Dinov2Backbone(backbone_size="dinov2_large", finetune_last_n_layers=1, reduced_dim=1024).cuda()
+    model = Dinov2Backbone(backbone_size="dinov2_large", finetune_last_n_layers=1).cuda()
 
     print(model)
 
@@ -111,4 +111,9 @@ if __name__ == "__main__":
     cls_token= model(x)
 
     print("Cls token shape:", cls_token.shape)
+
+    # import torch
+
+    # # DINOv2
+    # dinov2_vits14 = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
 
