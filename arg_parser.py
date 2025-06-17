@@ -11,7 +11,9 @@ parser.add_argument("--finetune_last_n_layers", default=4, type=int)
 parser.add_argument("--rerank", default=False, type=bool)
 parser.add_argument("--saliency_thresh", default=0.3, type=float)
 parser.add_argument("--nn_match_thresh", default=0.65, type=float)
-parser.add_argument("--facet_layer_and_facet", default={22: "value", 23: "attn"}, type=dict)
+parser.add_argument(
+    "--facet_layer_and_facet", default={22: "value", 23: "attn"}, type=dict
+)
 parser.add_argument("--include_cls", default=False, type=bool)
 parser.add_argument("--bin", default=False, type=bool)
 parser.add_argument("--hierarchy", default=2, type=int)
@@ -61,7 +63,7 @@ parser.add_argument("--accelerator", default="gpu", type=str)
 # select GPU device
 parser.add_argument("--devices", default=[0], type=list)
 # set training epochs
-parser.add_argument("--epochs", default=20, type=int)
+parser.add_argument("--epochs", default=30, type=int)
 # set batch size
 parser.add_argument("--train_batch_size", default=64, type=int)
 parser.add_argument("--eval_batch_size", default=64, type=int)
@@ -71,7 +73,9 @@ parser.add_argument("--num_workers", default=15, type=int)
 # set init learning rate for global trainer
 parser.add_argument("--lr", default=1e-5, type=float)
 # select optimizer. We have defined multiple optimizers in model_interface.py, we can select one for our study here.
-parser.add_argument("--optimizer", choices=["sgd", "adamw", "adam"], default="adam", type=str)
+parser.add_argument(
+    "--optimizer", choices=["sgd", "adamw", "adam"], default="adamw", type=str
+)
 # set momentum of optimizer. It should set for sgd. When we use adam or adamw optimizer, no need to set it
 parser.add_argument("--momentum", default=0.9, type=float)
 # set weight_decay rate for optimizer
@@ -87,7 +91,7 @@ parser.add_argument("--warmup_steps", default=200, type=int)
 parser.add_argument(
     "--lr_scheduler",
     choices=["none", "step", "multi_step", "cosine", "linear", "exp"],
-    default="none",
+    default="exp",
     type=str,
 )
 
@@ -111,7 +115,7 @@ parser.add_argument(
 # parser.add_argument('--total_iters', default=1000 * 100, type=int)
 
 # For ExponentialLR
-# parser.add_argument("--gamma", default=0.99, type=float)
+parser.add_argument("--gamma", default=0.99, type=float)
 
 
 # todo: loss function
@@ -135,13 +139,15 @@ parser.add_argument(
 parser.add_argument("--miner_margin", default=0.1, type=float)
 
 # whether to use memory bank
-parser.add_argument("--use_memory_bank", default=True, type=bool)
+parser.add_argument("--use_memory_bank", default=False, type=bool)
 parser.add_argument("--use_weight_decay", default=False, type=bool)
 parser.add_argument("--memory_bank_start_epoch", default=5, type=int)
-parser.add_argument("--memory_bank_size", default=16384, type=int)  # 4*64*4= 1024 4*64*8=2048 4*64*16=4096
+parser.add_argument(
+    "--memory_bank_size", default=16384, type=int
+)  # 4*64*4= 1024 4*64*8=2048 4*64*16=4096
 parser.add_argument("--decay_lambda", default=0.05, type=float)
-parser.add_argument("--save_feats", default=True, type=bool)
-parser.add_argument("--save_neg_num", default=True, type=bool)
+parser.add_argument("--save_feats", default=False, type=bool)
+parser.add_argument("--save_neg_num", default=False, type=bool)
 
 # whether to use gpu for calculate distance for validation
 parser.add_argument("--faiss_gpu", default=False, type=bool)
@@ -152,5 +158,5 @@ parser.add_argument("--gradient_accumulate_start_epoch", default=0, type=int)
 parser.add_argument("--gradient_accumulate_factor", default=2, type=int)
 
 # whether to use early stopping
-parser.add_argument("--use_early_stopping", default=False, type=bool)
-parser.add_argument("--patience", default=5, type=int)
+parser.add_argument("--use_early_stopping", default=True, type=bool)
+parser.add_argument("--patience", default=3, type=int)
