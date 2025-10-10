@@ -80,23 +80,23 @@ def main(args):
 if __name__ == "__main__":
 
     # single train
-    # args = parser.parse_args()
-    # main(args)
+    args = parser.parse_args()
+    main(args)
 
     # 第三种方式：修改多个参数的字典方式
-    configs = [
-        {"finetune_last_n_layers": 1},
-        {"finetune_last_n_layers": 2},
-        {"finetune_last_n_layers": 3},
-        {"finetune_last_n_layers": 4},
-        {"finetune_last_n_layers": 5},
-        {"finetune_last_n_layers": 6},
-    ]
-    for config in configs:
-        args = parser.parse_args()
-        for key, value in config.items():
-            setattr(args, key, value)
-        main(args)
+    # configs = [
+    #     # {"finetune_last_n_layers": 1},
+    #     {"finetune_last_n_layers": 2},
+    #     {"finetune_last_n_layers": 3},
+    #     {"finetune_last_n_layers": 4},
+    #     {"finetune_last_n_layers": 5},
+    #     {"finetune_last_n_layers": 6},
+    # ]
+    # for config in configs:
+    #     args = parser.parse_args()
+    #     for key, value in config.items():
+    #         setattr(args, key, value)
+    #     main(args)
 
     # checkpoint_paths=[
     #     # 不适用MQ

@@ -3,8 +3,8 @@ from argparse import ArgumentParser
 parser = ArgumentParser()
 
 # todo: Model Hyperparameters
-parser.add_argument("--model_name", default="dinov2_backbone", type=str)
-parser.add_argument("--backbone_size", default="dinov2_large", type=str)
+parser.add_argument("--model_name", default="dinov3_backbone", type=str)
+parser.add_argument("--backbone_size", default="dinov2_base", type=str)
 parser.add_argument("--finetune_last_n_layers", default=4, type=int)
 
 # todo:rerank
@@ -23,8 +23,8 @@ parser.add_argument("--hierarchy", default=2, type=int)
 # Here, we can assign train/eval/test datasets. Here, we use standard_data for
 parser.add_argument("--train_dataset", default="gsvcities_dataset", type=str)
 # args for training dataset GSVCities
-parser.add_argument("--image_size_train", default=[224, 224], type=list)
-parser.add_argument("--image_size_eval", default=[322, 322], type=list)
+parser.add_argument("--image_size_train", default=[320, 320], type=list)
+parser.add_argument("--image_size_eval", default=[320, 320], type=list)
 parser.add_argument("--shuffle_all", default=True, type=bool)
 parser.add_argument("--img_per_place", default=4, type=int)
 parser.add_argument("--min_img_per_place", default=4, type=int)
@@ -65,7 +65,7 @@ parser.add_argument("--devices", default=[0], type=list)
 # set training epochs
 parser.add_argument("--epochs", default=30, type=int)
 # set batch size
-parser.add_argument("--train_batch_size", default=64, type=int)
+parser.add_argument("--train_batch_size", default=32, type=int)
 parser.add_argument("--eval_batch_size", default=64, type=int)
 
 # set number of process worker in dataloader
@@ -127,7 +127,6 @@ parser.add_argument(
     default="MultiSimilarityLoss",
     type=str,
 )
-
 parser.add_argument(
     "--miner_name",
     choices=["MultiSimilarityMiner", "TripletMarginMiner", "PairMarginMiner"],
