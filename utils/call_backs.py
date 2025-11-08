@@ -25,7 +25,11 @@ class MyTQDMProgressBar(TQDMProgressBar):
 def load_callbacks(args):
     callbacks = []
 
-    monitor_metric = args.monitor_metric + '/R1' if not args.rerank else args.monitor_metric + '_rerank/R1'
+    monitor_metric = (
+        args.monitor_metric + "/R1"
+        if not args.rerank
+        else args.monitor_metric + "_rerank/R1"
+    )
 
     # use EarlyStopping.
     # The model will stop training after patience epoch where the monitor value (val_acc) is no longer increasing.
@@ -34,29 +38,36 @@ def load_callbacks(args):
     # todo: if we use multiple validation datasets, We must specify which dataset corresponds to the indicator being monitored.
     #  Same process should be setted in plc.ModelCheckpoint.
     if args.use_early_stopping:
-        callbacks.append(plc.EarlyStopping(
-            monitor=monitor_metric,  # todo: change the monitor metric for your dataset
-            mode='max',
-            patience=args.patience,
-            min_delta=0.00001
-        ))
+        callbacks.append(
+            plc.EarlyStopping(
+                monitor=monitor_metric,  # todo: change the monitor metric for your dataset
+                mode="max",
+                patience=args.patience,
+                min_delta=0.00001,
+            )
+        )
 
     #  the best k models according to the quantity monitored will be saved.
-    callbacks.append(plc.ModelCheckpoint(
-        # todo: change the monitor metric for your dataset
-        monitor=monitor_metric,
-        # todo: change the monitor metric for your dataset
-        filename=f'{args.model_name}' +
-                 '_epoch({epoch:02d})_step({step:04d})_R1[{' + args.monitor_metric +
-                 '/R1:.4f}]_R5[{' + args.monitor_metric +
-                 '/R5:.4f}]_R10[{' + args.monitor_metric +
-                 '/R10:.4f}]',
-        save_top_k=3,
-        auto_insert_metric_name=False,
-        mode='max',
-        save_last=True,
-        save_weights_only=True
-    ))
+    callbacks.append(
+        plc.ModelCheckpoint(
+            # todo: change the monitor metric for your dataset
+            monitor=monitor_metric,
+            # todo: change the monitor metric for your dataset
+            filename=f"{args.model_name}"
+            + "_epoch({epoch:02d})_step({step:04d})_R1[{"
+            + args.monitor_metric
+            + "/R1:.4f}]_R5[{"
+            + args.monitor_metric
+            + "/R5:.4f}]_R10[{"
+            + args.monitor_metric
+            + "/R10:.4f}]",
+            save_top_k=2,
+            auto_insert_metric_name=False,
+            mode="max",
+            save_last=True,
+            save_weights_only=True,
+        )
+    )
 
     # Generates a summary of all layers in a LightningModule
     # Note:The Trainer already configured with model summary callbacks by default.
@@ -66,12 +77,15 @@ def load_callbacks(args):
 
     # Automatically monitor and logs learning rate for learning rate schedulers during training.
     if args.lr_scheduler:
-        callbacks.append(plc.LearningRateMonitor(logging_interval='step'))
+        callbacks.append(plc.LearningRateMonitor(logging_interval="step"))
 
     # Change gradient accumulation factor according to scheduling.
     if args.gradient_accumulate:
-        callbacks.append(plc.GradientAccumulationScheduler({args.gradient_accumulate_start_epoch:
-                                                                args.gradient_accumulate_factor}))
+        callbacks.append(
+            plc.GradientAccumulationScheduler(
+                {args.gradient_accumulate_start_epoch: args.gradient_accumulate_factor}
+            )
+        )
 
     # # Implements the Stochastic Weight Averaging (SWA) Callback to average a model.
     # if args.StochasticWeightAveraging:
@@ -83,8 +97,6 @@ def load_callbacks(args):
     #     ))
 
     # init progress bar for validation
-    callbacks.append(
-        MyTQDMProgressBar()
-    )
+    callbacks.append(MyTQDMProgressBar())
 
     return callbacks

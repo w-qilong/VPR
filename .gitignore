@@ -1,6 +1,8 @@
-pretrained_model/
 logs/
+datasets/
+images/
 
+pretrained_model/
 sample_imgs/
 some_result_images/
 tmp_imgs/
@@ -8,6 +10,8 @@ tmp_files/
 
 others/MSLS_Dataset/
 others/AnyLoc/
+others/SciencePlots/
+**/*.ipynb
 
 **/__pycache__/
 

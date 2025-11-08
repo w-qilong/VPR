@@ -89,7 +89,8 @@ class AggMInterface(pl.LightningModule):
             "NCALoss",
         ]:
             self.metric_loss_function = MetricLoss(
-                self.metric_loss_function, margin=self.hparams.miner_margin
+                self.metric_loss_function,
+                margin=self.hparams.miner_margin,
             )
         else:
             raise ValueError(
@@ -104,6 +105,8 @@ class AggMInterface(pl.LightningModule):
                 memory_size=self.hparams.memory_bank_size,
                 miner=self.metric_loss_function.miner,
                 decay_lambda=self.hparams.decay_lambda,
+                collect_stats=self.hparams.collect_stats,  # 启用统计收集
+                collect_interval=self.hparams.collect_interval,  # 每50步收集一次
             )
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
@@ -147,8 +150,17 @@ class AggMInterface(pl.LightningModule):
     def on_train_epoch_start(self):
         # 我们将跟踪损失层面上无效对/三元组的百分比
         self.triplet_batch_acc = []
+        # 记录每个batch的处理时间
+        self.batch_times = []
+        self.batch_start_time = None
 
     def training_step(self, batch, batch_idx):
+        # 记录batch开始时间
+        if self.batch_start_time is not None:
+            batch_time = time.time() - self.batch_start_time
+            self.batch_times.append(batch_time)
+        self.batch_start_time = time.time()
+
         # 获取batch数据
         places, labels = batch
 
@@ -227,8 +239,19 @@ class AggMInterface(pl.LightningModule):
             self.feats_list.append(batch_feats.detach().cpu())
 
     def on_train_epoch_end(self):
+        # 记录平均batch时间
+        if len(self.batch_times) > 0:
+            avg_batch_time = sum(self.batch_times) / len(self.batch_times)
+            self.log("avg_batch_time", avg_batch_time, prog_bar=True, logger=True)
+            print(
+                f"\nEpoch {self.current_epoch} - 平均batch处理时间: {avg_batch_time:.4f}秒"
+            )
+
         # we empty the batch_acc list for next epoch
         self.triplet_batch_acc = []
+        self.batch_times = []
+        self.batch_start_time = None
+
         if self.hparams.use_memory_bank:
             self.memory_bank.reset_queue()
 
@@ -254,11 +277,23 @@ class AggMInterface(pl.LightningModule):
             # 初始化列表，用于存储重排序结果
             self.val_rerank_results = dict()
 
+        # 初始化推理时间统计
+        self.feature_extraction_times = []
+        self.retrieval_times = []
+        self.rerank_times = []
+
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         with torch.no_grad():
             places, _ = batch
-            # 简化为只获取cls_token
+
+            # 记录特征提取时间（单张图像）
+            start_time = time.time()
             cls_token = self.forward(places)
+            feature_time = (time.time() - start_time) / places.shape[
+                0
+            ]  # 平均每张图像的时间
+            self.feature_extraction_times.append(feature_time)
+
             self.val_cls_outputs[dataloader_idx].append(cls_token.detach().cpu())
 
     def get_dataset_info(self, val_set_name, val_dataset):
@@ -300,7 +335,8 @@ class AggMInterface(pl.LightningModule):
             ref_cls_tokens = cls_tokens[:num_references]
             query_cls_tokens = cls_tokens[num_references:]
 
-            # 第一次排序
+            # 第一次排序 - 记录检索时间
+            start_time = time.time()
             pitts_dict, first_predictions = validation.get_validation_recalls(
                 r_list=ref_cls_tokens,
                 q_list=query_cls_tokens,
@@ -310,6 +346,10 @@ class AggMInterface(pl.LightningModule):
                 dataset_name=val_set_name,
                 faiss_gpu=self.hparams.faiss_gpu,
             )
+            retrieval_time = (time.time() - start_time) / len(
+                query_cls_tokens
+            )  # 平均每个查询的时间
+            self.retrieval_times.append(retrieval_time)
 
             # 记录第一次结果
             for k in k_values:
@@ -322,10 +362,10 @@ class AggMInterface(pl.LightningModule):
 
             if self.hparams.rerank:
                 # 第二次排序
-                # saliency_threshs = np.arange(0.1, 0.9, 0.1).tolist()
-                # nn_match_threshs = np.arange(0.1, 0.9, 0.1).tolist()
-                saliency_threshs = self.hparams.saliency_thresh
-                nn_match_threshs = self.hparams.nn_match_thresh
+                saliency_threshs = np.arange(0.1, 1.1, 0.1).tolist()
+                nn_match_threshs = np.arange(0.9, 1.1, 0.1).tolist()
+                # saliency_threshs = self.hparams.saliency_thresh
+                # nn_match_threshs = self.hparams.nn_match_thresh
 
                 improved_examples = []  # 用于存储重排序后改进的例子
 
@@ -337,6 +377,8 @@ class AggMInterface(pl.LightningModule):
                         )
                         print(f"\n开始对{val_set_name}数据集进行二次排序...")
 
+                        # 记录重排序时间
+                        start_time = time.time()
                         rerank_predictions = self.rerank_predictions(
                             val_dataset,
                             num_references,
@@ -344,44 +386,48 @@ class AggMInterface(pl.LightningModule):
                             saliency_thresh=saliency_thresh,
                             nn_match_thresh=nn_match_thresh,
                         )
+                        rerank_time = (time.time() - start_time) / len(
+                            first_predictions
+                        )  # 平均每个查询的时间
+                        self.rerank_times.append(rerank_time)
 
                         # 计算并记录第二次结果
                         d, rerank_predictions = self.calculate_rerank_metrics(
                             rerank_predictions, positives, k_values, val_set_name
                         )
 
-                        # 查找重排序后结果改进的查询
-                        improved_examples = self.find_improved_examples(
-                            val_dataset,
-                            num_references,
-                            first_predictions,
-                            rerank_predictions,
-                            positives,
-                            top_k=3,  # 获取前3个结果
-                        )
+                        # # 查找重排序后结果改进的查询
+                        # improved_examples = self.find_improved_examples(
+                        #     val_dataset,
+                        #     num_references,
+                        #     first_predictions,
+                        #     rerank_predictions,
+                        #     positives,
+                        #     top_k=3,  # 获取前3个结果
+                        # )
 
-                        # 保存改进的例子
-                        if self.trainer.log_dir and len(improved_examples) > 0:
-                            example_save_path = os.path.join(
-                                self.trainer.log_dir,
-                                f"improved_examples_{val_set_name}_{saliency_thresh}_{nn_match_thresh}.pth",
-                            )
-                            torch.save(improved_examples, example_save_path)
+                        # # 保存改进的例子
+                        # if self.trainer.log_dir and len(improved_examples) > 0:
+                        #     example_save_path = os.path.join(
+                        #         self.trainer.log_dir,
+                        #         f"improved_examples_{val_set_name}_{saliency_thresh}_{nn_match_thresh}.pth",
+                        #     )
+                        #     torch.save(improved_examples, example_save_path)
 
-                            # 可视化部分改进的例子（选择前100个）
-                            self.visualize_improved_examples(
-                                val_dataset,
-                                num_references,
-                                (
-                                    improved_examples[:100]
-                                    if len(improved_examples) > 100
-                                    else improved_examples
-                                ),
-                                os.path.join(
-                                    self.trainer.log_dir,
-                                    f"improved_examples_{val_set_name}_{saliency_thresh}_{nn_match_thresh}",
-                                ),
-                            )
+                        #     # 可视化部分改进的例子（选择前100个）
+                        #     self.visualize_improved_examples(
+                        #         val_dataset,
+                        #         num_references,
+                        #         (
+                        #             improved_examples[:100]
+                        #             if len(improved_examples) > 100
+                        #             else improved_examples
+                        #         ),
+                        #         os.path.join(
+                        #             self.trainer.log_dir,
+                        #             f"improved_examples_{val_set_name}_{saliency_thresh}_{nn_match_thresh}",
+                        #         ),
+                        #     )
 
                         # 记录第二次结果
                         for k in k_values:
@@ -418,6 +464,47 @@ class AggMInterface(pl.LightningModule):
             torch.cuda.empty_cache()
 
             print("\n")
+
+        # 记录推理时间统计
+        if len(self.feature_extraction_times) > 0:
+            avg_feature_time = sum(self.feature_extraction_times) / len(
+                self.feature_extraction_times
+            )
+            self.log(
+                "avg_feature_extraction_time",
+                avg_feature_time,
+                prog_bar=False,
+                logger=True,
+            )
+            print(
+                f"平均特征提取时间(单张图像): {avg_feature_time:.6f}秒 ({1/avg_feature_time:.2f} imgs/sec)"
+            )
+
+        if len(self.retrieval_times) > 0:
+            avg_retrieval_time = sum(self.retrieval_times) / len(self.retrieval_times)
+            self.log(
+                "avg_retrieval_time", avg_retrieval_time, prog_bar=False, logger=True
+            )
+            print(f"平均检索时间(单个查询): {avg_retrieval_time:.6f}秒")
+
+        if len(self.rerank_times) > 0:
+            avg_rerank_time = sum(self.rerank_times) / len(self.rerank_times)
+            self.log("avg_rerank_time", avg_rerank_time, prog_bar=False, logger=True)
+            print(f"平均重排序时间(单个查询): {avg_rerank_time:.6f}秒")
+
+            # 计算总体推理时间
+            if len(self.retrieval_times) > 0 and len(self.feature_extraction_times) > 0:
+                # 假设每个查询需要提取一次特征，然后检索，最后重排序
+                total_inference_time = (
+                    avg_feature_time + avg_retrieval_time + avg_rerank_time
+                )
+                self.log(
+                    "avg_total_inference_time",
+                    total_inference_time,
+                    prog_bar=False,
+                    logger=True,
+                )
+                print(f"平均总推理时间(单个查询): {total_inference_time:.6f}秒")
 
         # 保存第一次结果
         if self.trainer.log_dir:
@@ -464,7 +551,15 @@ class AggMInterface(pl.LightningModule):
         saliency_thresh,
         nn_match_thresh,
     ):
-        """执行重排序"""
+        """执行重排序
+
+        Args:
+            val_dataset: 验证数据集
+            num_references: 参考图像数量
+            first_predictions: 初步检索结果
+            saliency_thresh: 显著性阈值
+            nn_match_thresh: 匹配阈值
+        """
         rerank_predictions = []
 
         with torch.no_grad():
@@ -963,3 +1058,9 @@ class AggMInterface(pl.LightningModule):
                 dpi=600,
             )
             plt.close()
+
+    def on_train_end(self):
+        """训练结束时保存统计数据"""
+        if self.hparams.use_memory_bank and hasattr(self.memory_bank, "stats_history"):
+            save_path = os.path.join(self.logger.log_dir, "negative_sample_stats.pkl")
+            self.memory_bank.save_stats(save_path)

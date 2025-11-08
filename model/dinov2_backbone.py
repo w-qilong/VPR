@@ -43,13 +43,12 @@ class Dinov2Backbone(nn.Module):
         embedding_size (int): Size of embeddings before reduction
     """
 
-    def __init__(
-        self, backbone_size="dinov2_large", finetune_last_n_layers=1):
+    def __init__(self, backbone_size="dinov2_large", finetune_last_n_layers=1):
         super().__init__()
 
         # backbone 参数
-        self.backbone_size= backbone_size
-        self.finetune_last_n_layers=finetune_last_n_layers
+        self.backbone_size = backbone_size
+        self.finetune_last_n_layers = finetune_last_n_layers
 
         # 加载预训练模型
         self._load_model()
@@ -64,15 +63,14 @@ class Dinov2Backbone(nn.Module):
         self.interpolate_offset = self.model.interpolate_offset
         self.stride = self.model.patch_embed.proj.stride
 
-
     def _load_model(self):
         """加载预训练模型"""
         self.model = load(
             # repo_or_dir="facebookresearch/dinov2",
-            repo_or_dir='/home/cartolab3/.cache/torch/hub/facebookresearch_dinov2_main',
+            repo_or_dir="/home/cartolab3/.cache/torch/hub/facebookresearch_dinov2_main",
             model=dinov2_backbones[self.backbone_size]["name"],
             trust_repo=True,
-            source='local',
+            source="local",
         )
 
     def forward(self, x):
@@ -101,14 +99,16 @@ if __name__ == "__main__":
     from torchvision import transforms
     import torch
 
-    model = Dinov2Backbone(backbone_size="dinov2_large", finetune_last_n_layers=1).cuda()
+    model = Dinov2Backbone(
+        backbone_size="dinov2_large", finetune_last_n_layers=1
+    ).cuda()
 
     print(model)
 
     x = torch.rand(2, 3, 224, 224).cuda()
 
     # 测试模式，获取第5个block的attention输出
-    cls_token= model(x)
+    cls_token = model(x)
 
     print("Cls token shape:", cls_token.shape)
 
@@ -116,4 +116,3 @@ if __name__ == "__main__":
 
     # # DINOv2
     # dinov2_vits14 = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
-
