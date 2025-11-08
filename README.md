@@ -88,7 +88,7 @@ RerankVPR/
 - PyTorch 2.0+
 - CUDA 12.1+ (for GPU training)
 - 32GB+ RAM recommended
-- GPU with 24GB+ VRAM (for large model training)
+- GPU with 24GB
 
 ### Installation
 
@@ -171,25 +171,6 @@ Pre-trained model checkpoints will be made available upon paper acceptance:
 | RerankVPR-L | DINOv2-Large | 304M   | TBD           | TBD           | TBD            | [Link](#)   |
 
 *Note: Download links and performance numbers will be updated after paper acceptance.*
-
-### Reproducibility
-
-To ensure reproducibility:
-
-1. **Fixed Random Seeds**: Set `--seed 1234` (default) for consistent results
-2. **Deterministic Operations**: PyTorch Lightning handles deterministic training
-3. **Hardware Requirements**: Results reported in paper used NVIDIA A100 40GB GPU
-4. **Precision**: Mixed precision training (`16-mixed`) is used by default
-5. **Expected Variance**: ±0.5% Recall@1 variance across different runs is normal
-
-**Note**: Results may vary slightly depending on:
-
-- GPU architecture (A100 vs V100 vs RTX 3090, etc.)
-- PyTorch version
-- CUDA version
-- cuDNN version
-
-For exact reproduction of paper results, refer to `environment.yaml` for complete dependency versions.
 
 ### Pre-trained Models
 
@@ -468,7 +449,7 @@ class MyDataset(Dataset):
         self.base_path = base_path
         self.transform = transform
         # Load your dataset metadata
-      
+  
     def __getitem__(self, index):
         # Load and return image
         img_path = self.base_path / self.image_paths[index]
